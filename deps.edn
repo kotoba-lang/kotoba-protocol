@@ -1,0 +1,11 @@
+{;; kotoba-protocol — 層/語彙/app モデルの正本 (spec-first, pure cljc,
+ ;; zero runtime deps)。実装は既存 repo 群 (io-ipld/datom/kotobase/kototama…)
+ ;; に住み、この repo は宣言と検証だけを持つ。ADR-2607071500。
+ :paths ["src"]
+ :deps {}
+ :aliases
+ {:test {:extra-paths ["test"]
+         :extra-deps {io.github.cognitect-labs/test-runner
+                      {:git/tag "v0.5.1" :git/sha "dfb30dd"}}
+         :main-opts ["-m" "cognitect.test-runner"]
+         :exec-fn cognitect.test-runner.api/test}}}
