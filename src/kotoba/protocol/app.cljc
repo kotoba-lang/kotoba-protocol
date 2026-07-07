@@ -25,6 +25,17 @@
   ["gen-keypair" "sign" "verify" "sha256-hex"
    "http-post" "log-read" "log-write" "clock-monotonic"])
 
+(defn cap->wasm-import
+  "cap 名 (kebab, protocol 正本) → wasm import 関数名 (snake, guest ABI)。
+  guest の module kotoba は snake_case で import する。"
+  [cap]
+  (str/replace cap "-" "_"))
+
+(defn wasm-import->cap
+  "wasm import 関数名 (snake) → cap 名 (kebab)。"
+  [name]
+  (str/replace name "_" "-"))
+
 (def bridge-caps
   "host 代行 capability (postMessage 等の host bridge 経由)。wasm の同期
   ABI では `http-post` がブラウザで実装不能 (ADR-2607062400) なため、
