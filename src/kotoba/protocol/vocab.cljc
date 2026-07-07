@@ -34,7 +34,7 @@
 (defn version? [s]
   (boolean (and (string? s) (re-matches #"\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?" s))))
 
-(defn uri? [s]
+(defn app-uri? [s]
   (boolean (and (string? s) (re-find #"^(https|ipfs|ipns)://\S+" s))))
 
 (defn- non-blank-string? [s]
@@ -73,7 +73,7 @@
    :kotoba.app/entry {:doc "bundle 内 entry path (例 index.html)"
                       :pred non-blank-string?}
    :kotoba.app/embed-url {:doc "mount 可能 URL (https:// | ipfs://<cid>[/p] | ipns://<name>[/p])。mount 手段 (iframe/web-component) は host 実装詳細で protocol 外"
-                          :pred uri?}
+                          :pred app-uri?}
    :kotoba.app/appview-of {:doc "appview が描画する対象の selector (graph 名 / 属性 namespace 群) — EDN"
                            :pred (fn [v] (or (map? v) (vector? v) (string? v)))}
    :kotoba.app/wasm {:doc "wasm モジュール群 [{:cid <cid> :imports [<actor:host import 名>…]}]"
@@ -89,7 +89,7 @@
    :kotoba.app/latest {:doc "更新チャネル = 提供 actor の鍵由来 IPNS 名 (署名済み latest ポインタ)"
                        :pred ipns-name?}
    :kotoba.app/icon {:doc "アイコン (CID or URI)"
-                     :pred (fn [v] (or (cid? v) (uri? v)))}})
+                     :pred (fn [v] (or (cid? v) (app-uri? v)))}})
 
 (defn known-attribute? [attr]
   (contains? attributes attr))
