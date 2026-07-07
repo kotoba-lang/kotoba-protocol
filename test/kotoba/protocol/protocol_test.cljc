@@ -1,6 +1,7 @@
 (ns kotoba.protocol.protocol-test
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.protocol.app :as app]
+            [kotoba.protocol.bridge]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.vocab :as vocab]))
 
@@ -114,3 +115,33 @@
   (is (contains? app/known-caps "http-post"))
   (is (contains? app/known-caps "net/http-post")
       "同期 ABI 制約のため net 系は host bridge 代行 (ADR-2607062400)"))
+
+;; ── bridge ───────────────────────────────────────────────────────────────────
+
+(deftest bridge-grant-is-intersection-in-request-order
+  (is (= ["graph/query" "llm/complete"]
+         (kotoba.protocol.bridge/grant ["graph/query" "fs/read" "llm/complete"]
+                                       ["llm/complete" "graph/query"])))
+  (is (= [] (kotoba.protocol.bridge/grant nil ["graph/query"]))))
+
+(deftest bridge-request-validation-is-fail-closed
+  (let [granted ["graph/query"]]
+    (is (= [] (kotoba.protocol.bridge/validate-request
+               (kotoba.protocol.bridge/request "r1" "graph/query" {:nsid "x"})
+               granted)))
+    (is (= [{:error :cap-not-granted :cap "llm/complete"}]
+           (kotoba.protocol.bridge/validate-request
+            (kotoba.protocol.bridge/request "r2" "llm/complete" {})
+            granted)))
+    (is (= [{:error :unknown-cap :cap "fs/read"}]
+           (kotoba.protocol.bridge/validate-request
+            (kotoba.protocol.bridge/request "r3" "fs/read" {})
+            granted)))
+    (is (some #(= :missing-id (:error %))
+              (kotoba.protocol.bridge/validate-request
+               {:kotoba/bridge "request" :cap "graph/query"} granted)))))
+
+(deftest bridge-messages-survive-string-keys
+  (is (= "hello" (kotoba.protocol.bridge/message-type
+                  {"kotoba/bridge" "hello" "v" 1 "granted" []})))
+  (is (nil? (kotoba.protocol.bridge/message-type {:type "unrelated"}))))
