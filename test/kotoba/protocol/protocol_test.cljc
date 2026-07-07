@@ -145,3 +145,9 @@
   (is (= "hello" (kotoba.protocol.bridge/message-type
                   {"kotoba/bridge" "hello" "v" 1 "granted" []})))
   (is (nil? (kotoba.protocol.bridge/message-type {:type "unrelated"}))))
+
+(deftest wasm-import-cap-mapping
+  (is (= "sha256_hex" (app/cap->wasm-import "sha256-hex")))
+  (is (= "clock_monotonic" (app/cap->wasm-import "clock-monotonic")))
+  (is (= "sha256-hex" (app/wasm-import->cap "sha256_hex")))
+  (is (= "gen-keypair" (app/wasm-import->cap (app/cap->wasm-import "gen-keypair")))))
