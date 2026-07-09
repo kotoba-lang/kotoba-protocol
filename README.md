@@ -36,6 +36,14 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
     kototama.contract / actor-host.js、guest module 名は `"kotoba"`）+
     host bridge caps（同期 ABI でブラウザ実装不能な `http-post` 系の代行 —
     鍵も token も app には渡らない）。
+  - `bundle-cid-consistent?` — `:kotoba.app/bundle-cid` と ipfs:// scheme の
+    `:kotoba.app/embed-url` を両方持つ manifest は同一 CID を指すことを検証
+    （`validate-manifest` に組込み済み）。
+- `kotoba.protocol.cid` — CIDv1/raw/sha2-256 の digest 抽出 + 比較
+  （`parse-raw-cid` / `digest-matches?`）。ハッシュ計算自体は host の仕事
+  （browser の `crypto.subtle.digest` 等）— ここは CID⇄digest bytes の変換の
+  み。raw codec の単一バイナリ（wasm module 等）専用 — dag-pb 等の
+  ディレクトリ CID は対象外（mount 戦略ごと見直す別 follow-up）。
 
 ## atproto との関係
 
