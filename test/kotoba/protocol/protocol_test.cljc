@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.protocol.app :as app]
             [kotoba.protocol.bridge]
+            [kotoba.protocol.cid :as cid-ns]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.vocab :as vocab]))
 
@@ -109,6 +110,47 @@
     (is (= [{:cap "fs/read" :error :unknown-cap}]
            (app/validate-manifest (assoc mangaka-manifest
                                          :kotoba.app/caps ["fs/read"]))))))
+
+;; ── app: bundle-cid / embed-url consistency (ADR-2607071500 Addendum 4) ──────
+
+(def raw-cid "bafkreibm6jg3ux5qumhcn2b3flc3tyu6dmlb4xa7u5bf44yegnrjhc4yeq")
+(def other-raw-cid "bafkreidbwa6hrvssu64krf2fxcstyepdmfswrwstjpctxbzgv7u2oku2eu")
+
+(deftest bundle-cid-consistency
+  (testing "no embed-url at all — vacuously consistent"
+    (is (true? (app/bundle-cid-consistent? {:kotoba.app/bundle-cid raw-cid}))))
+  (testing "https embed-url — bundle-cid can't be cross-checked against it"
+    (is (true? (app/bundle-cid-consistent? {:kotoba.app/bundle-cid raw-cid
+                                            :kotoba.app/embed-url "https://aozora.app/studio"}))))
+  (testing "ipfs embed-url matching bundle-cid"
+    (is (true? (app/bundle-cid-consistent? {:kotoba.app/bundle-cid raw-cid
+                                            :kotoba.app/embed-url (str "ipfs://" raw-cid)}))))
+  (testing "ipfs embed-url NOT matching bundle-cid — desync detected"
+    (is (false? (app/bundle-cid-consistent? {:kotoba.app/bundle-cid raw-cid
+                                             :kotoba.app/embed-url (str "ipfs://" other-raw-cid)}))))
+  (testing "validate-manifest reports the mismatch"
+    (let [m {:kotoba.app/id "net.kotoba.x" :kotoba.app/version "0.0.1" :kotoba.app/kind "embed"
+             :kotoba.app/bundle-cid raw-cid
+             :kotoba.app/embed-url (str "ipfs://" other-raw-cid)}]
+      (is (some #(= :bundle-cid-embed-url-mismatch (:error %)) (app/validate-manifest m)))
+      (is (= [] (app/validate-manifest (assoc m :kotoba.app/embed-url (str "ipfs://" raw-cid))))))))
+
+;; ── cid: digest extraction / verification ────────────────────────────────────
+
+(def sha256-hello
+  [44 242 77 186 95 176 163 14 38 232 59 42 197 185 226 158
+   27 22 30 92 31 167 66 94 115 4 51 98 147 139 152 36])
+
+(deftest cid-digest-roundtrip
+  (is (= sha256-hello (:digest (cid-ns/parse-raw-cid raw-cid))))
+  (is (true? (cid-ns/digest-matches? raw-cid sha256-hello)))
+  (is (false? (cid-ns/digest-matches? raw-cid (assoc sha256-hello 0 0))))
+  (testing "dag-pb (non-raw) CID can't be digest-verified this way — fail-closed, not an exception"
+    (is (= :not-raw-sha256 (:error (cid-ns/parse-raw-cid cid))))
+    (is (false? (cid-ns/digest-matches? cid sha256-hello))))
+  (testing "malformed input degrades to an error map, never throws"
+    (is (= :bad-base32 (:error (cid-ns/parse-raw-cid "bnope"))))
+    (is (= :not-base32-cidv1 (:error (cid-ns/parse-raw-cid "Qm123"))))))
 
 (deftest capability-registry
   (is (= 8 (count app/actor-host-imports)))

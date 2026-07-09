@@ -105,10 +105,26 @@
    "embed"   {:any-of [[:kotoba.app/bundle-cid :kotoba.app/embed-url]]}
    "actor"   {:required [:kotoba.app/wasm]}})
 
+(defn bundle-cid-consistent?
+  "manifest が :kotoba.app/bundle-cid と ipfs:// scheme の :kotoba.app/embed-url
+  を両方持つ場合、同じ CID を指していなければならない (どちらか一方だけ、
+  または embed-url が https/ipns なら該当なし = true)。手で 2 箇所に同じ
+  CID 文字列を書く現行運用は、片方だけ更新されると気付かず desync する —
+  それを検出する。"
+  [m]
+  (let [bundle-cid (:kotoba.app/bundle-cid m)
+        embed-url (:kotoba.app/embed-url m)
+        parsed (when (string? embed-url) (parse-embed-url embed-url))]
+    (if (and bundle-cid parsed (= :ipfs (:scheme parsed)))
+      (= bundle-cid (:cid parsed))
+      true)))
+
 (defn validate-manifest
   "app manifest entity map → problems ([] = ok)。
   共通必須: id / version / kind。kind 別要件は kind-requirements。
-  caps は registry の部分集合。値形は vocab/validate-entity に委譲。"
+  caps は registry の部分集合。値形は vocab/validate-entity に委譲。
+  bundle-cid と ipfs:// embed-url を両方持つ場合は同一 CID であることも検証
+  (bundle-cid-consistent?)。"
   [m]
   (let [problems (vocab/validate-entity m)
         problems (reduce (fn [ps attr]
@@ -133,5 +149,9 @@
                          (or any-of []))
         problems (into problems
                        (map (fn [c] {:cap c :error :unknown-cap})
-                            (unknown-caps (:kotoba.app/caps m []))))]
+                            (unknown-caps (:kotoba.app/caps m []))))
+        problems (if (bundle-cid-consistent? m)
+                   problems
+                   (conj problems {:attrs [:kotoba.app/bundle-cid :kotoba.app/embed-url]
+                                   :error :bundle-cid-embed-url-mismatch}))]
     (vec problems)))
