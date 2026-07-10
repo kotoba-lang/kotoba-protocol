@@ -152,6 +152,27 @@
     (is (= :bad-base32 (:error (cid-ns/parse-raw-cid "bnope"))))
     (is (= :not-base32-cidv1 (:error (cid-ns/parse-raw-cid "Qm123"))))))
 
+;; ── cid: multicodec-general parsing (ADR-2607071500 Addendum 6 — dag-pb) ─────
+
+(def dag-pb-digest
+  [107 236 249 153 170 112 97 69 8 150 15 67 189 2 251 141
+   244 253 208 125 13 86 116 240 121 48 228 241 11 21 37 62])
+
+(deftest parse-cid-any-codec
+  (testing "raw codec (0x55)"
+    (is (= {:codec :raw :digest sha256-hello} (cid-ns/parse-cid raw-cid))))
+  (testing "dag-pb codec (0x70) — the same `cid` var used elsewhere is already dag-pb"
+    (is (= {:codec :dag-pb :digest dag-pb-digest} (cid-ns/parse-cid cid))))
+  (testing "digest-matches-cid? works across codecs, unlike digest-matches?"
+    (is (true? (cid-ns/digest-matches-cid? raw-cid sha256-hello)))
+    (is (true? (cid-ns/digest-matches-cid? cid dag-pb-digest)))
+    (is (false? (cid-ns/digest-matches? cid dag-pb-digest))
+        "digest-matches? stays raw-only — dag-pb must go through parse-cid/digest-matches-cid?")
+    (is (false? (cid-ns/digest-matches-cid? cid (assoc dag-pb-digest 0 0)))))
+  (testing "malformed input still degrades to an error map"
+    (is (= :bad-base32 (:error (cid-ns/parse-cid "bnope"))))
+    (is (= :not-base32-cidv1 (:error (cid-ns/parse-cid "Qm123"))))))
+
 (deftest capability-registry
   (is (= 8 (count app/actor-host-imports)))
   (is (contains? app/known-caps "http-post"))

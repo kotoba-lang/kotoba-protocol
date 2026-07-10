@@ -39,11 +39,14 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
   - `bundle-cid-consistent?` — `:kotoba.app/bundle-cid` と ipfs:// scheme の
     `:kotoba.app/embed-url` を両方持つ manifest は同一 CID を指すことを検証
     （`validate-manifest` に組込み済み）。
-- `kotoba.protocol.cid` — CIDv1/raw/sha2-256 の digest 抽出 + 比較
-  （`parse-raw-cid` / `digest-matches?`）。ハッシュ計算自体は host の仕事
-  （browser の `crypto.subtle.digest` 等）— ここは CID⇄digest bytes の変換の
-  み。raw codec の単一バイナリ（wasm module 等）専用 — dag-pb 等の
-  ディレクトリ CID は対象外（mount 戦略ごと見直す別 follow-up）。
+- `kotoba.protocol.cid` — CIDv1/sha2-256 の digest 抽出 + 比較。ハッシュ計算
+  自体は host の仕事（browser の `crypto.subtle.digest` 等）— ここは
+  CID⇄digest bytes の変換のみ。`parse-raw-cid` / `digest-matches?` は raw
+  codec の単一バイナリ（wasm module 等）専用。`parse-cid` /
+  `digest-matches-cid?` はその一般化 — raw/dag-pb/dag-cbor いずれの
+  multicodec でも digest 位置は同じなので codec を問わず比較できる
+  （dag-pb ディレクトリ CID の再帰検証で使う。dag-pb 自体の protobuf decode
+  はここでは行わない — zero deps を保つため host 側の仕事）。
 
 ## atproto との関係
 
