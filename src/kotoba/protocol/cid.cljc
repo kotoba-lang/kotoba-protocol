@@ -1,16 +1,17 @@
 (ns kotoba.protocol.cid
-  "CIDv1/raw/sha2-256 の digest 抽出 + 比較 (ADR-2607071500 Addendum 4:
-  bundle-cid integrity)。
+  "CIDv1/sha2-256 の digest 抽出 + 比較 (ADR-2607071500 Addendum 4/6:
+  bundle-cid integrity + dag-pb ディレクトリ検証)。
 
   ハッシュ計算そのものは host の仕事 (browser の js/crypto.subtle.digest,
   JVM の MessageDigest) — ここは pure な CID⇄digest bytes の変換だけを持つ。
-  kotobase.archive-put (net-kotobase) が本番で運用している同じロジックの
-  移植 (base32-decode / parse-raw-cid は byte-exact)。
-
-  scope: raw codec (0x55) + sha2-256 の単一バイナリ CID のみを検証できる
-  (wasm module 等)。dag-pb 等の UnixFS ディレクトリ CID (複数ファイルの
-  Merkle DAG) はこの単純な sha256 一致では検証できない — mount 戦略ごと
-  見直す別 follow-up。"
+  `parse-raw-cid` / `digest-matches?` は kotobase.archive-put (net-kotobase)
+  が本番で運用しているロジックの移植 (byte-exact)。`parse-cid` /
+  `digest-matches-cid?` はその一般化 — raw/dag-pb/dag-cbor いずれの
+  multicodec でも digest 位置は同じ (CIDv1 sha2-256 の byte layout は
+  `[version-varint codec-varint hash-fn-varint digest-len-varint …digest]`
+  で、codec varint だけが変わる) ため、codec を問わず digest 比較できる。
+  dag-pb 自体の protobuf decode はここでは行わない (zero deps を保つ —
+  decode は host 側 `@ipld/dag-pb` 等の仕事、ここは digest 一致の判定のみ)。"
   (:require [clojure.string :as str]))
 
 (def ^:private b32-alphabet "abcdefghijklmnopqrstuvwxyz234567")
@@ -54,4 +55,39 @@
   検証できない CID を検証済み扱いしない)。"
   [cid computed-digest]
   (let [{:keys [digest error]} (parse-raw-cid cid)]
+    (boolean (and (nil? error) (= digest (vec computed-digest))))))
+
+(def ^:private known-codecs
+  {0x55 :raw
+   0x70 :dag-pb
+   0x71 :dag-cbor})
+
+(defn parse-cid
+  "CIDv1/sha2-256、任意の multicodec → {:codec <keyword-or-int> :digest
+  [32 bytes]} | {:error …}。`parse-raw-cid` と違い codec を raw に限定しない
+  — dag-pb ディレクトリノード等、複数 codec を横断して DAG を辿る場合に使う。
+  既知 codec (raw/dag-pb/dag-cbor) は keyword、未知 codec は生の int を返す
+  (unknown でも digest 抽出自体は失敗させない — codec の解釈は呼び出し側の
+  責務)。"
+  [cid]
+  (cond
+    (not (string? cid)) {:error :not-a-string}
+    (not (str/starts-with? cid "b")) {:error :not-base32-cidv1}
+    :else
+    (let [bs (base32-decode (subs cid 1))]
+      (cond
+        (nil? bs) {:error :bad-base32}
+        (not= 36 (count bs)) {:error :unexpected-length :length (count bs)}
+        (not= 0x01 (first bs)) {:error :not-cidv1 :version (first bs)}
+        (not= [0x12 0x20] (subvec bs 2 4)) {:error :not-sha256 :hash-fn (subvec bs 2 4)}
+        :else (let [codec-byte (nth bs 1)]
+                {:codec (get known-codecs codec-byte codec-byte)
+                 :digest (subvec bs 4)})))))
+
+(defn digest-matches-cid?
+  "digest-matches? の codec 非限定版 — raw/dag-pb/dag-cbor いずれの CID でも
+  computed-digest との一致を判定する (dag-pb ノード自身の block bytes も、
+  UnixFS file leaf の raw bytes も、同じ関数で検証できる)。"
+  [cid computed-digest]
+  (let [{:keys [digest error]} (parse-cid cid)]
     (boolean (and (nil? error) (= digest (vec computed-digest))))))
