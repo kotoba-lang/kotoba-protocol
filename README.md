@@ -47,6 +47,9 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
   multicodec でも digest 位置は同じなので codec を問わず比較できる
   （dag-pb ディレクトリ CID の再帰検証で使う。dag-pb 自体の protobuf decode
   はここでは行わない — zero deps を保つため host 側の仕事）。
+  `base32-encode` / `parse-cid-bytes` / `cid-bytes->string` — CID⇄raw bytes
+  の相互変換 (dag-pb ノードの Link.Hash は生 bytes で来るので、fetch 可能な
+  CID 文字列に戻すのに使う)。
 
 ## atproto との関係
 

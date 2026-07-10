@@ -11,7 +11,8 @@
   `[version-varint codec-varint hash-fn-varint digest-len-varint …digest]`
   で、codec varint だけが変わる) ため、codec を問わず digest 比較できる。
   dag-pb 自体の protobuf decode はここでは行わない (zero deps を保つ —
-  decode は host 側 `@ipld/dag-pb` 等の仕事、ここは digest 一致の判定のみ)。"
+  decode は host 側の仕事、ここは digest 一致の判定と CID⇄bytes 変換
+  (`base32-encode` / `parse-cid-bytes` / `cid-bytes->string`) のみ)。"
   (:require [clojure.string :as str]))
 
 (def ^:private b32-alphabet "abcdefghijklmnopqrstuvwxyz234567")
@@ -91,3 +92,35 @@
   [cid computed-digest]
   (let [{:keys [digest error]} (parse-cid cid)]
     (boolean (and (nil? error) (= digest (vec computed-digest))))))
+
+(defn base32-encode
+  "byte int seq → lower-case unpadded base32 string (base32-decode の逆)。
+  bit 列を作って 5 bit ずつ切り出す素直な実装 — CID サイズ (数十 byte) の
+  入力しか扱わないので性能は問題にならない。"
+  [bytes]
+  (let [bits (mapcat (fn [b] (for [i (range 7 -1 -1)] (bit-and 1 (bit-shift-right b i)))) bytes)
+        pad-len (mod (- 5 (mod (count bits) 5)) 5)
+        bits (concat bits (repeat pad-len 0))]
+    (apply str (map (fn [g] (nth b32-alphabet (reduce (fn [acc b] (+ (* acc 2) b)) 0 g)))
+                     (partition 5 bits)))))
+
+(defn parse-cid-bytes
+  "raw CID bytes (base32 decode 済みの int seq) → {:codec :digest} | {:error}。
+  parse-cid の bytes 版 — dag-pb ノードの Link.Hash 等、CID が既に生 byte 列
+  として手元にある場合はここから始めれば base32 decode を経由しなくて済む。"
+  [bytes]
+  (let [bs (vec bytes)]
+    (cond
+      (not= 36 (count bs)) {:error :unexpected-length :length (count bs)}
+      (not= 0x01 (first bs)) {:error :not-cidv1 :version (first bs)}
+      (not= [0x12 0x20] (subvec bs 2 4)) {:error :not-sha256 :hash-fn (subvec bs 2 4)}
+      :else (let [codec-byte (nth bs 1)]
+              {:codec (get known-codecs codec-byte codec-byte)
+               :digest (subvec bs 4)}))))
+
+(defn cid-bytes->string
+  "raw CID bytes → multibase-'b' (base32 lower, CIDv1 既定) 文字列。
+  parse-cid-bytes と逆方向 — dag-pb ノードの Link.Hash (生 CID bytes) を
+  再度 fetch 可能な CID 文字列に戻すのに使う。"
+  [bytes]
+  (str "b" (base32-encode bytes)))

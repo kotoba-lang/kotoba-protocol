@@ -173,6 +173,18 @@
     (is (= :bad-base32 (:error (cid-ns/parse-cid "bnope"))))
     (is (= :not-base32-cidv1 (:error (cid-ns/parse-cid "Qm123"))))))
 
+(deftest base32-round-trip-and-cid-bytes-conversion
+  (testing "base32-encode is the exact inverse of base32-decode"
+    (is (= raw-cid (str "b" (cid-ns/base32-encode (cid-ns/base32-decode (subs raw-cid 1))))))
+    (is (= cid (str "b" (cid-ns/base32-encode (cid-ns/base32-decode (subs cid 1)))))))
+  (testing "parse-cid-bytes / cid-bytes->string mirror parse-cid on raw CID bytes"
+    (let [raw-bytes (cid-ns/base32-decode (subs raw-cid 1))]
+      (is (= {:codec :raw :digest sha256-hello} (cid-ns/parse-cid-bytes raw-bytes)))
+      (is (= raw-cid (cid-ns/cid-bytes->string raw-bytes))))
+    (let [dagpb-bytes (cid-ns/base32-decode (subs cid 1))]
+      (is (= {:codec :dag-pb :digest dag-pb-digest} (cid-ns/parse-cid-bytes dagpb-bytes)))
+      (is (= cid (cid-ns/cid-bytes->string dagpb-bytes))))))
+
 (deftest capability-registry
   (is (= 8 (count app/actor-host-imports)))
   (is (contains? app/known-caps "http-post"))
