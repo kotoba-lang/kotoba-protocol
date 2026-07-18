@@ -224,6 +224,45 @@
                                        ["llm/complete" "graph/query"])))
   (is (= [] (kotoba.protocol.bridge/grant nil ["graph/query"]))))
 
+;; ── labeler trust (ADR-2607182600 d5/P3) ─────────────────────────────────────
+
+(def a-verified-label {:src "did:web:labeler.aozora.app" :uri "at://did:web:app1/net.kotoba.app.manifest/self" :val "verified"})
+
+(deftest verified-requires-trusted-source-nonnegated-verified-val
+  (is (true? (kotoba.protocol.bridge/verified? [a-verified-label] #{"did:web:labeler.aozora.app"})))
+  (testing "wrong val"
+    (is (false? (kotoba.protocol.bridge/verified? [(assoc a-verified-label :val "spam")]
+                                                  #{"did:web:labeler.aozora.app"}))))
+  (testing "negated"
+    (is (false? (kotoba.protocol.bridge/verified? [(assoc a-verified-label :neg true)]
+                                                  #{"did:web:labeler.aozora.app"}))))
+  (testing "src not trusted by THIS host — a manifest can't self-attest via a colluding labeler"
+    (is (false? (kotoba.protocol.bridge/verified? [(assoc a-verified-label :src "did:web:evil-labeler.example")]
+                                                  #{"did:web:labeler.aozora.app"}))))
+  (testing "no labels at all"
+    (is (false? (kotoba.protocol.bridge/verified? [] #{"did:web:labeler.aozora.app"}))))
+  (testing "no trusted labelers configured — everything is untrusted"
+    (is (false? (kotoba.protocol.bridge/verified? [a-verified-label] #{})))))
+
+(deftest grant-with-trust-gates-only-risky-caps
+  (testing "unverified: risky caps dropped, graph/query passes through unaffected"
+    (is (= ["graph/query"]
+           (kotoba.protocol.bridge/grant-with-trust
+            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            [] #{"did:web:labeler.aozora.app"}))))
+  (testing "verified: risky caps pass through too, in original request order"
+    (is (= ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+           (kotoba.protocol.bridge/grant-with-trust
+            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            [a-verified-label] #{"did:web:labeler.aozora.app"}))))
+  (testing "still capped by host-supported — verified doesn't grant caps the host never offered"
+    (is (= ["graph/query"]
+           (kotoba.protocol.bridge/grant-with-trust
+            ["graph/query" "graph/transact"] ["graph/query"]
+            [a-verified-label] #{"did:web:labeler.aozora.app"})))))
+
 (deftest bridge-request-validation-is-fail-closed
   (let [granted ["graph/query"]]
     (is (= [] (kotoba.protocol.bridge/validate-request

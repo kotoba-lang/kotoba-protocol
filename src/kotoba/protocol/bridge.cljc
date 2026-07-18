@@ -72,3 +72,52 @@
   [requested-caps host-supported]
   (let [supported (set host-supported)]
     (vec (filter supported (or requested-caps [])))))
+
+;; ── labeler trust (ADR-2607182600 d5/P3) ─────────────────────────────────────
+;;
+;; grant (above) only intersects requested ∩ host-supported — it doesn't ask
+;; "should this UNVERIFIED manifest get this cap at all". risky-caps closes
+;; that gap: caps that hand the guest either write reach (graph/transact) or
+;; a real off-host credential (llm/complete の応答/oauth/graph.write の CACAO)
+;; default to deny unless a labeler the HOST subscribes to (never the
+;; manifest's own claim — a malicious manifest can't self-attest) has issued
+;; a non-negated "verified" label for the manifest's own atproto record uri.
+;;
+;; labels are com.atproto.label.defs#label shaped maps (aozora.pds.label's
+;; existing atproto-compliant signing/verification/storage — this ns does
+;; NOT re-verify signatures, it trusts whatever labels the HOST already
+;; fetched via a verified com.atproto.label.queryLabels call and is handing
+;; in here; that verification happened upstream, once, at the labeler-
+;; ingestion boundary — not per grant-with-trust call).
+
+(def risky-caps
+  "caps that hand the guest write reach or a real off-host credential —
+  default-deny for an unlabeled/untrusted manifest."
+  #{"graph/transact" "llm/complete" "oauth/graph.write"})
+
+(defn verified?
+  "labels (seq of {:src :val :neg? …} atproto label maps for the manifest's
+  own record uri) + trusted-labelers (set of labeler DIDs the HOST
+  subscribes to — never derived from the manifest itself) → true iff a
+  trusted, non-negated \"verified\" label exists. Absence of a matching
+  label (no labels at all, wrong val, negated, or src not in
+  trusted-labelers) → false — fail-closed by construction, not by an
+  explicit deny-list."
+  [labels trusted-labelers]
+  (boolean (some (fn [l] (and (contains? (set trusted-labelers) (:src l))
+                             (= "verified" (:val l))
+                             (not (:neg l))))
+                 labels)))
+
+(defn grant-with-trust
+  "grant, further narrowed: risky-caps only pass through when verified?.
+  Non-risky caps (graph/query) are unaffected. An unverified manifest
+  requesting a risky cap simply doesn't get it in the result — same silent-
+  drop UX as requesting a cap the host doesn't support at all (grant's
+  existing semantics), not a distinguishable error (a labeler subscription
+  list is host policy, not something to leak cap-by-cap to an unverified
+  guest)."
+  [requested-caps host-supported labels trusted-labelers]
+  (let [trusted? (verified? labels trusted-labelers)]
+    (vec (remove #(and (contains? risky-caps %) (not trusted?))
+                 (grant requested-caps host-supported)))))
