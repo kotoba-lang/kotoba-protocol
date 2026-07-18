@@ -211,7 +211,10 @@
   (is (= 8 (count app/actor-host-imports)))
   (is (contains? app/known-caps "http-post"))
   (is (contains? app/known-caps "net/http-post")
-      "同期 ABI 制約のため net 系は host bridge 代行 (ADR-2607062400)"))
+      "同期 ABI 制約のため net 系は host bridge 代行 (ADR-2607062400)")
+  (is (contains? app/known-caps "oauth/graph.write")
+      "P2 OAuth 委任 cap (ADR-2607182600 d4 axis 2) — 他の bridge-caps と違い
+      app に実クレデンシャル (scope 限定 CACAO) が渡る"))
 
 ;; ── bridge ───────────────────────────────────────────────────────────────────
 
