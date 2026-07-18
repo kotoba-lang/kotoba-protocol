@@ -111,6 +111,28 @@
            (app/validate-manifest (assoc mangaka-manifest
                                          :kotoba.app/caps ["fs/read"]))))))
 
+;; ── app: manifest 署名 metadata (ADR-2607182600 d1b) ─────────────────────────
+
+(deftest sig-metadata
+  (testing "well-formed sig metadata"
+    (is (vocab/sig-meta? {:suite-id "ed25519+ml-dsa-65" :key-id "kagi:fleet-owner-key" :epoch 0}))
+    (is (vocab/sig-meta? {:suite-id "ed25519" :key-id "k1" :epoch 3})))
+  (testing "malformed sig metadata"
+    (is (not (vocab/sig-meta? nil)))
+    (is (not (vocab/sig-meta? "signed")))
+    (is (not (vocab/sig-meta? {:suite-id "" :key-id "k1" :epoch 0})))
+    (is (not (vocab/sig-meta? {:suite-id "ed25519" :epoch 0})))
+    (is (not (vocab/sig-meta? {:suite-id "ed25519" :key-id "k1" :epoch -1})))
+    (is (not (vocab/sig-meta? {:suite-id "ed25519" :key-id "k1" :epoch "0"}))))
+  (testing "manifest with sig validates; bad sig is reported"
+    (is (= [] (app/validate-manifest
+               (assoc mangaka-manifest
+                      :kotoba.app/sig {:suite-id "ed25519+ml-dsa-65"
+                                       :key-id "kagi:mangaka-actor" :epoch 1}))))
+    (is (= :invalid-value
+           (:error (first (app/validate-manifest
+                           (assoc mangaka-manifest :kotoba.app/sig {:epoch 1}))))))))
+
 ;; ── app: bundle-cid / embed-url consistency (ADR-2607071500 Addendum 4) ──────
 
 (def raw-cid "bafkreibm6jg3ux5qumhcn2b3flc3tyu6dmlb4xa7u5bf44yegnrjhc4yeq")

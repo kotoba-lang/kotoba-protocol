@@ -40,6 +40,17 @@
 (defn- non-blank-string? [s]
   (and (string? s) (not (str/blank? s))))
 
+(defn sig-meta?
+  "manifest 署名 metadata (ADR-2607182600 d1b)。署名 byte 列そのものではなく
+  「どの鍵のどの epoch で署名したか」の参照のみ — 検証時に kagi key registry
+  (ADR-2607181200) を解決して key state (retired epoch は verify-only) を
+  強制するための座標。"
+  [v]
+  (boolean (and (map? v)
+                (non-blank-string? (:suite-id v))
+                (non-blank-string? (:key-id v))
+                (nat-int? (:epoch v)))))
+
 ;; ── attribute registry ───────────────────────────────────────────────────────
 
 (def attributes
@@ -89,7 +100,9 @@
    :kotoba.app/latest {:doc "更新チャネル = 提供 actor の鍵由来 IPNS 名 (署名済み latest ポインタ)"
                        :pred ipns-name?}
    :kotoba.app/icon {:doc "アイコン (CID or URI)"
-                     :pred (fn [v] (or (cid? v) (app-uri? v)))}})
+                     :pred (fn [v] (or (cid? v) (app-uri? v)))}
+   :kotoba.app/sig {:doc "manifest 署名 metadata {:suite-id <suite> :key-id <id> :epoch <nat-int>} — 検証者は kagi key registry (ADR-2607181200) を verify 時に解決して key state を強制する。retired epoch は過去 manifest の検証のみ可 (ADR-2607182600 d1b)"
+                    :pred sig-meta?}})
 
 (defn known-attribute? [attr]
   (contains? attributes attr))
