@@ -40,8 +40,17 @@
   "host 代行 capability (postMessage 等の host bridge 経由)。wasm の同期
   ABI では `http-post` がブラウザで実装不能 (ADR-2607062400) なため、
   ネットワーク/graph/LLM 系は guest から直接ではなく host が代行する —
-  鍵も token も app には渡らない。"
-  ["net/http-post" "graph/query" "graph/transact" "llm/complete"])
+  鍵も token も app には渡らない。
+
+  `oauth/graph.write` は他の3つと性質が違う (ADR-2607182600 d4 axis 2)。
+  graph/query・graph/transact・llm/complete は host が『代行実行』する
+  (app には結果だけ返る、鍵/token は一切見せない)のに対し、
+  oauth/graph.write は host が同意確認の上でユーザー自身の DID 鍵から
+  scope 限定・短命の CACAO を client-side mint して app に渡す —
+  渡された CACAO で app 自身が (host を経由せず、host を跨いでも) 直接
+  PDS に書き込める。fail-closed な同意 UI を挟む点、および app に
+  実際に委任クレデンシャルが渡る点が他の3 cap と異なる。"
+  ["net/http-post" "graph/query" "graph/transact" "llm/complete" "oauth/graph.write"])
 
 (def known-caps (set (concat actor-host-imports bridge-caps)))
 
