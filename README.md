@@ -40,7 +40,8 @@ L0–L5 と直交する。1 つの Merkle DAG に全部畳まない。
 正本は `kotoba.protocol.layers` の `planes` / `link-kinds`。
 動く代数は `kotoba.protocol.graph`（edge）・`address`（hash の *of-what*）・
 `surfaces`（既存系の投影）・`discover`（IPNI）・`route`（peer lookup）・
-`naming`（IPNS resolve/publish）。残りの成熟度は `layers/plane-maturity`。
+`naming`（IPNS resolve/publish）・`govern`（誰が overlay を書いてよいか）。
+残りの成熟度は `layers/plane-maturity`。
 
 ## Holochain との切り方
 
@@ -70,6 +71,7 @@ datom が CreateLink 相当。IPLD link が git tree 相当。
 - `kotoba.protocol.discover` — IPNI / provider record。CID を書き換えない。live は `lookup-live` / `advertise-live`
 - `kotoba.protocol.route` — peer-id → addrs。peer id を書き換えない。live は `lookup-live`
 - `kotoba.protocol.naming` — k51 → いまの CID。name を書き換えない。live は `lookup-live` / `publish-live`
+- `kotoba.protocol.govern` — overlay 書込の governor。拒否は log に届かない
 - `kotoba.protocol.vocab` — `:kotoba.actor/*` `:kotoba.graph/*` `:kotoba.app/*` `:kotoba.link/*`
 - `kotoba.protocol.app` — L5 manifest / embed-url / caps
 - `kotoba.protocol.cid` — CIDv1 digest。UnixFS walk はしない

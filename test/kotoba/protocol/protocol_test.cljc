@@ -6,6 +6,7 @@
             [kotoba.protocol.cid :as cid-ns]
             [kotoba.protocol.discover :as discover]
             [kotoba.protocol.graph :as graph]
+            [kotoba.protocol.govern :as govern]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.naming :as naming]
             [kotoba.protocol.ref :as ref]
@@ -69,10 +70,14 @@
     (is (#{:ready :pending :n/a :blocked} (:live m)) (str plane " live"))
     (when (= :ready (:live m))
       (is (symbol? (:ns m)) (str plane " live ready without a ns")))
+    (when (= :ready (:algebra m))
+      (is (symbol? (:ns m)) (str plane " algebra ready without a ns")))
     (when (= :blocked (:live m))
       (is (keyword? (:blocked-until m)) (str plane " blocked without a reason"))))
   (is (= :ready (get-in layers/plane-maturity [:naming :live]))
       "tick 1: IPNS GET/PUT is specified; live must not stay pending")
+  (is (= :ready (get-in layers/plane-maturity [:authorization :algebra]))
+      "tick 2: governor deny must be an algebra, not a README")
   (is (= :blocked (get-in layers/plane-maturity [:transport :live]))
       "this process is not a DHT node"))
 
@@ -675,5 +680,58 @@
                   (graph/create-link (graph/store)
                                      {:from cid :to raw-cid})
                   (constantly "not-a-cid"))))))
+
+(def ^:private other-did "did:key:z6MkpTHR8VHsExkJxkgDwbwisfb5Tq2mWiwWjcmSKqU2E")
+
+(deftest govern-allows-own-graph-self-mint
+  (let [st (graph/put-node (graph/store) {:cid cid :body "A"})
+        intent (govern/intent {:author did :graph-owner did
+                               :from cid :to raw-cid :tag "mentions"})
+        after (govern/write-overlay st intent)]
+    (is (nil? (:error after)))
+    (is (graph/nodes-unchanged? st after))
+    (is (= 1 (count (:actions after))))
+    (is (= did (:author (first (:actions after)))))))
+
+(deftest govern-denied-write-never-reaches-the-log
+  (let [st (graph/put-node (graph/store) {:cid cid :body "A"})
+        intent (govern/intent {:author other-did :graph-owner did
+                               :from cid :to raw-cid})
+        out (govern/write-overlay st intent)]
+    (is (= :governor-denied (:error out)))
+    (is (= :foreign-chain (:reason out)))
+    (is (= (:actions st) (:actions (:store out))))
+    (is (= (:nodes st) (:nodes (:store out))))))
+
+(deftest govern-host-string-is-not-a-key
+  (is (= :not-a-key
+         (:deny (govern/decide (govern/intent {:author "kotobase.net"
+                                               :graph-owner did
+                                               :from cid :to raw-cid}))))))
+
+(deftest govern-nil-governor-is-deny-not-allow
+  (let [st (graph/put-node (graph/store) {:cid cid :body "A"})
+        intent (govern/intent {:author did :graph-owner did
+                               :from cid :to raw-cid})
+        out (govern/write-overlay st intent nil)]
+    (is (= :governor-required (:error out)))
+    (is (zero? (count (:actions (:store out)))))))
+
+(deftest govern-injected-deny-beats-self-mint
+  (let [st (graph/put-node (graph/store) {:cid cid :body "A"})
+        intent (govern/intent {:author did :graph-owner did
+                               :from cid :to raw-cid})
+        out (govern/write-overlay st intent (constantly {:deny :policy}))]
+    (is (= :governor-denied (:error out)))
+    (is (= :policy (:reason out)))
+    (is (= (:actions st) (:actions (:store out))))))
+
+(deftest govern-self-mint-rejects-depth-other-than-one
+  (is (= :depth
+         (:deny (govern/decide
+                 (govern/intent {:author did :graph-owner did
+                                 :from cid :to raw-cid
+                                 :cacao {:depth 2 :resource :own-graph}}))))))
+
 
 
