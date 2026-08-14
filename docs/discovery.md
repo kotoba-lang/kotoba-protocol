@@ -11,11 +11,15 @@
 この面。CID → provider の広告索引。公開 URI に IPNI を入れない。
 `ipfs://{cid}` のまま、finder が provider を返す。
 
-この workspace に IPNI 専用 repo はまだ無い。いま実在するのは
-`io-libp2p-specs-kad-dht` の delegated routing（Kad の `GET_PROVIDERS` に近い）。
-IPNI を足すなら discovery の adapter であって、identity の再設計ではない。
+IPNI 専用 repo は作らない。いま live な adapter は
+`io-libp2p-specs-kad-dht` の delegated routing
+（`kad.routing/find-providers` → `GET /routing/v1/providers/{cid}`）。
+それは Kad の `GET_PROVIDERS` に近い HTTP 窓口であって、この process が
+DHT node になることではない。IPNI を足すなら同じ discovery adapter を
+差し替えるだけ。identity の再設計ではない。
 
 レコード代数は `kotoba.protocol.discover`（`advertise` / `lookup`）。
+live の継ぎ目は `lookup-live`（finder は注入。protocol は kad に依存しない）。
 provider を足しても CID は同じ。
 
 ## 他の index
@@ -27,3 +31,5 @@ provider を足しても CID は同じ。
 | DHT entry for CreateLink | overlay edge。親 EntryHash は変わらない |
 
 discovery の沈黙を「無い」と読まない（測れなかった検査は緑ではない）。
+`lookup-live` が `[]` なのは「訊いて、誰も持っていない」。`:ok? false` は
+「訊けなかった」。

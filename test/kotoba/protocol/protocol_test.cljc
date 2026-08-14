@@ -468,6 +468,36 @@
     (is (= [] (discover/lookup idx raw-cid)))
     (is (= :discovery (:plane (layers/owner-plane :ipni))))))
 
+(deftest lookup-live-does-not-rewrite-cid
+  (let [finder (fn [_]
+                 {:ok? true
+                  :providers [{:ID "12D3KooWpeer"
+                               :Addrs ["/ip4/127.0.0.1/tcp/4001"]
+                               :cid "bafybeidifferentcidxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}]})
+        recs (discover/lookup-live cid finder)]
+    (is (vector? recs))
+    (is (= cid (:cid (first recs))))
+    (is (false? (:mutates-cid? (first recs))))
+    (is (= "12D3KooWpeer" (:peer (first recs))))
+    (is (= :discovery (:plane (first recs))))))
+
+(deftest lookup-live-rejects-a-finder-that-returns-a-different-cid
+  (let [finder (constantly
+                [{:plane :discovery :cid raw-cid :peer "12D3KooWpeer"
+                  :addrs [] :mutates-cid? false}])]
+    (is (= :cid-mismatch (:error (discover/lookup-live cid finder))))))
+
+(deftest lookup-live-empty-is-not-an-outage
+  (is (= [] (discover/lookup-live cid (constantly {:ok? true :providers []}))))
+  (is (= :all-routers-failed
+         (:reason (discover/lookup-live cid
+                                        (constantly {:ok? false :reason :all-routers-failed}))))
+      "could not ask is distinct from nobody provides"))
+
+(deftest lookup-live-requires-a-finder
+  (is (= :finder-fn-required (:error (discover/lookup-live cid nil))))
+  (is (= :invalid-cid (:error (discover/lookup-live "not-a-cid" (constantly []))))))
+
 ;; ── L2: action log → chain commit CID ────────────────────────────────────────
 
 (defn- recording-commit
