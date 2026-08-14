@@ -8,6 +8,7 @@
             [kotoba.protocol.graph :as graph]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.ref :as ref]
+            [kotoba.protocol.route :as route]
             [kotoba.protocol.surfaces :as surfaces]
             [kotoba.protocol.vocab :as vocab]))
 
@@ -41,7 +42,9 @@
   (is (= :l1-fact (:layer (layers/owner-of :action-link)))
       "Holochain CreateLink / datom は親 CID を変えない")
   (is (= :l4-distribution (:layer (layers/owner-of :ipni)))
-      "IPNI は discovery。identity ではない"))
+      "IPNI は discovery。identity ではない")
+  (is (= :routing (:plane (layers/owner-plane :peer-lookup)))
+      "GET /peers は routing。discovery ではない"))
 
 (deftest planes-are-the-eight-communication-faces
   (is (= [:identity :naming :routing :discovery :transport :session :authorization :content-protocol]
@@ -517,6 +520,31 @@
            (:reason (discover/advertise-live rec
                                              (constantly {:ok? false :reason :rejected})))))
     (is (= :putter-fn-required (:error (discover/advertise-live rec nil))))))
+
+(def ^:private routing-peer-id "12D3KooWpeer")
+
+(deftest lookup-peer-live-does-not-rewrite-peer-id
+  (let [recs (route/lookup-live routing-peer-id
+                                (constantly {:ok? true
+                                             :peers [{:ID routing-peer-id
+                                                      :Addrs ["/ip4/127.0.0.1/tcp/4001"]
+                                                      :Protocols ["transport-bitswap"]}]}))]
+    (is (vector? recs))
+    (is (= routing-peer-id (:peer (first recs))))
+    (is (= :routing (:plane (first recs))))
+    (is (= ["transport-bitswap"] (:protocols (first recs))))))
+
+(deftest lookup-peer-live-rejects-a-finder-that-returns-a-different-peer
+  (is (= :peer-mismatch
+         (:error (route/lookup-live routing-peer-id
+                                    (constantly [{:plane :routing :peer "12D3KooWother"
+                                                  :addrs [] :protocols []}]))))))
+
+(deftest lookup-peer-live-empty-is-not-an-outage
+  (is (= [] (route/lookup-live routing-peer-id (constantly {:ok? true :peers []}))))
+  (is (= :all-routers-failed
+         (:reason (route/lookup-live routing-peer-id
+                                     (constantly {:ok? false :reason :all-routers-failed}))))))
 
 ;; ── L2: action log → chain commit CID ────────────────────────────────────────
 

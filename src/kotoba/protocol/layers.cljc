@@ -62,7 +62,7 @@
 
    {:plane :routing
     :readme "docs/routing.md"
-    :responsibility "この CID / 名を誰が持っているかへ近づく。kad lookup、delegated routing。packet routing ではない"
+    :responsibility "この CID / 名 / peer へ近づく。kad lookup、delegated GET /peers/{id}。packet routing ではない"
     :impl-repos ["io-libp2p-specs-kad-dht"]}
 
    {:plane :discovery
@@ -141,6 +141,7 @@
    :action-link :l1-fact
    :ipni :l4-distribution
    :kad-dht :l4-distribution
+   :peer-lookup :l4-distribution
    :entry-hash :l0-address
    :action-hash :l0-address
    :dna-hash :l0-address
@@ -167,6 +168,7 @@
    :ipns-ref :naming
    :db-namespace :naming
    :kad-dht :routing
+   :peer-lookup :routing
    :ipni :discovery
    :ipfs-retrieval :discovery
    :pinning :discovery
