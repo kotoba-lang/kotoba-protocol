@@ -77,9 +77,9 @@
    ;; graph
    :kotoba.graph/name {:doc "db 名前空間 kotobase/db/<did>/<name> の <name>"
                        :pred non-blank-string?}
-   :kotoba.graph/cid {:doc "graph snapshot の root CID (L2)"
+   :kotoba.graph/cid {:doc "L2 graph identity: hasher CID from chain.core/commit! of the action log (typically dag-cbor bafy…). Not the kotobase archive Location. When PUT /ipfs/:cid only accepts raw CIDv1, Location is the raw CID of the same bytes (ADR-2608145400 / ADR-2608148200)."
                       :pred cid?}
-   :kotoba.graph/head {:doc "可変 head の IPNS 名 (publish/resolve は L4)"
+   :kotoba.graph/head {:doc "optional mutable name (IPNS k51…). Naming plane, not identity. Do not set unless publishing a name (ADR-2608145100 / ADR-2608148200)."
                        :pred ipns-name?}
 
    ;; app manifest

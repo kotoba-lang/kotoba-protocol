@@ -16,7 +16,11 @@
   hasher as `commit-fn`:
 
     (fn [prev-cid state]
-      (chain.core/commit! put! get-fn state prev-cid))"
+      (chain.core/commit! put! get-fn state prev-cid))
+
+  That CID is identity (typically dag-cbor). kotobase archive PUT
+  accepts only raw CIDv1; Location is the raw CID of the same bytes
+  (ADR-2608148200). `:kotoba.graph/head` is naming, not identity."
   (:require [kotoba.protocol.layers :as layers]
             [kotoba.protocol.vocab :as vocab]))
 
