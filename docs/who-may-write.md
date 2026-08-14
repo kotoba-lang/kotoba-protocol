@@ -12,3 +12,13 @@ block を書き換える許可ではないので、対象 Entry の CID は動�
 
 inga は「自分の chain 以外に書けない」を採る。conductor は採らない。
 無順序の書き込み面も採らない — Datalog join が ref 1 本だから。
+
+live HTTP は無い。代数の継ぎ目は `kotoba.protocol.govern/write-overlay`。
+既定の `decide` は署名を検証しない（crypto は cacao）。形だけで fail closed:
+
+- 自 graph・depth-1 自己 mint（cacao 省略可）→ allow
+- 他人の chain → deny `:foreign-chain`
+- host 文字列 → deny `:not-a-key`
+- `governor-fn` が nil → deny（allow にしない）
+
+拒否した書込は action log に届かない。親 CID も動かない。

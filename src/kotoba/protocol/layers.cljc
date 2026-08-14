@@ -82,8 +82,8 @@
 
    {:plane :authorization
     :readme "docs/who-may-write.md"
-    :responsibility "誰が overlay を書いてよいか。CACAO / governor / Holochain membrane 相当。サーバは authority ではない"
-    :impl-repos ["kotoba-auth" "cacao"]}
+    :responsibility "誰が overlay を書いてよいか。CACAO / governor / Holochain membrane 相当。サーバは authority ではない。拒否した書込は action log に届かない"
+    :impl-repos ["kotoba-auth" "cacao" "kotoba-protocol (govern)"]}
 
    {:plane :content-protocol
     :readme "docs/content-protocol.md"
@@ -230,5 +230,5 @@
    :session {:algebra :pending :live :blocked
              :blocked-until :transport
              :ns nil}
-   :authorization {:algebra :pending :live :n/a :ns nil}
+   :authorization {:algebra :ready :live :n/a :ns 'kotoba.protocol.govern}
    :content-protocol {:algebra :ready :live :n/a :ns 'kotoba.protocol.graph}})
