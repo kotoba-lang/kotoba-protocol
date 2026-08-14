@@ -498,6 +498,26 @@
   (is (= :finder-fn-required (:error (discover/lookup-live cid nil))))
   (is (= :invalid-cid (:error (discover/lookup-live "not-a-cid" (constantly []))))))
 
+(deftest advertise-live-does-not-rewrite-cid
+  (let [rec (discover/record {:cid cid :peer "12D3KooWpeer" :addrs []})
+        out (discover/advertise-live rec (fn [r] {:ok? true :cid (:cid r) :accepted ["https://r1"]}))]
+    (is (true? (:live? out)))
+    (is (= cid (:cid out)))
+    (is (false? (:mutates-cid? out)))
+    (is (= ["https://r1"] (:accepted out)))))
+
+(deftest advertise-live-rejects-a-putter-that-returns-a-different-cid
+  (let [rec (discover/record {:cid cid :peer "12D3KooWpeer" :addrs []})]
+    (is (= :cid-mismatch
+           (:error (discover/advertise-live rec (constantly {:ok? true :cid raw-cid})))))))
+
+(deftest advertise-live-rejection-is-not-a-pass
+  (let [rec (discover/record {:cid cid :peer "12D3KooWpeer" :addrs []})]
+    (is (= :rejected
+           (:reason (discover/advertise-live rec
+                                             (constantly {:ok? false :reason :rejected})))))
+    (is (= :putter-fn-required (:error (discover/advertise-live rec nil))))))
+
 ;; ── L2: action log → chain commit CID ────────────────────────────────────────
 
 (defn- recording-commit
