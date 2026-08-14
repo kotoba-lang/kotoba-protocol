@@ -15,6 +15,9 @@
 `io-libp2p-specs-kad-dht` の delegated routing（Kad の `GET_PROVIDERS` に近い）。
 IPNI を足すなら discovery の adapter であって、identity の再設計ではない。
 
+レコード代数は `kotoba.protocol.discover`（`advertise` / `lookup`）。
+provider を足しても CID は同じ。
+
 ## 他の index
 
 | 系 | 何を索引するか |

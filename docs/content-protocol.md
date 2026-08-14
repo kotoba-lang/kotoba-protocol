@@ -24,6 +24,16 @@ IPLD Merkle link だけにすると、後から edge を足すたびに親を pu
 CreateLink だけにすると、配布物の closure を 1 個の CID で検証できない。
 **両方要る。混ぜて 1 種にしない。**
 
+参照代数は `kotoba.protocol.graph`:
+
+- `put-node` — 同じ CID に違う merkle-links を入れると `:cid-mismatch`
+- `merkle-child` — 親を変えた *新しい* ノード。同じ CID では put できない
+- `create-link` — ノード map は `=` のまま。`:log-head` だけ進む
+- `neighbors` / `walk` — 種類を分けて辿る。A に CreateLink で B を足しても
+  merkle walk は B に届かない
+
+既存系の落とし先は `kotoba.protocol.surfaces`。
+
 ## 既存系の落とし先
 
 | 系 | identity | structure | naming |

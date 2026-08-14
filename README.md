@@ -38,6 +38,8 @@ L0–L5 と直交する。1 つの Merkle DAG に全部畳まない。
 | content protocol | [docs/content-protocol.md](docs/content-protocol.md) | IPLD merkle **and** datom/CreateLink |
 
 正本は `kotoba.protocol.layers` の `planes` / `link-kinds`。
+動く代数は `kotoba.protocol.graph`（edge）・`address`（hash の *of-what*）・
+`surfaces`（既存系の投影）・`discover`（IPNI）。
 
 ## Holochain との切り方
 
@@ -61,7 +63,11 @@ datom が CreateLink 相当。IPLD link が git tree 相当。
 
 - `kotoba.protocol.layers` — `layers` / `planes` / `link-kinds` / `owner-of` / `owner-plane`
 - `kotoba.protocol.ref` — `ipfs://{cidv1}` \| `ipns://{k51}`。path は identity ではない
-- `kotoba.protocol.vocab` — `:kotoba.actor/*` `:kotoba.graph/*` `:kotoba.app/*`
+- `kotoba.protocol.graph` — 2 種の link の参照代数。merkle は親 CID を変える、action は変えない
+- `kotoba.protocol.address` — output vs input。Holochain の Entry/Action/Dna/Agent は *of-what*
+- `kotoba.protocol.surfaces` — URL / DNS / HTTP / Git / pkg / RPC を 8 面へ投影。1 DAG に畳まない
+- `kotoba.protocol.discover` — IPNI / provider record。CID を書き換えない
+- `kotoba.protocol.vocab` — `:kotoba.actor/*` `:kotoba.graph/*` `:kotoba.app/*` `:kotoba.link/*`
 - `kotoba.protocol.app` — L5 manifest / embed-url / caps
 - `kotoba.protocol.cid` — CIDv1 digest。UnixFS walk はしない
 

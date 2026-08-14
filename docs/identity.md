@@ -22,3 +22,5 @@ CID を持つ。違うのは「何の hash か」であって、公開 URI の�
 
 CIDv0 (`Qm…`) は歴史的 L0 形。公開ラベルにしない。
 HTTPS は identity ではない（transport / location）。
+
+代数は `kotoba.protocol.address`（`output` / `input` / `holochain-kind`）。

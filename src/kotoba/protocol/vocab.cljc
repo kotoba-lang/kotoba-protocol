@@ -112,7 +112,23 @@
    :kotoba.app/icon {:doc "アイコン (CID or URI)"
                      :pred (fn [v] (or (cid? v) (app-uri? v)))}
    :kotoba.app/sig {:doc "manifest 署名 metadata {:suite-id <suite> :key-id <id> :epoch <nat-int>} — 検証者は kagi key registry (ADR-2607181200) を verify 時に解決して key state を強制する。retired epoch は過去 manifest の検証のみ可 (ADR-2607182600 d1b)"
-                    :pred sig-meta?}})
+                    :pred sig-meta?}
+
+   ;; overlay / merkle edges (ADR-2608145200). merkle は node 内なので
+   ;; datom に出るのは主に :action。:merkle を書くなら「この CID の中に
+   ;; この child が居る」という観察であって、後付け edge ではない。
+   :kotoba.link/from {:doc "edge の始点 CID（EntryHash 相当）"
+                      :pred cid?}
+   :kotoba.link/to {:doc "edge の終点 CID"
+                    :pred cid?}
+   :kotoba.link/kind {:doc "merkle = 親 CID が変わる / action = 親 CID 不変（CreateLink）"
+                      :pred #{"merkle" "action"}}
+   :kotoba.link/tag {:doc "overlay のラベル（Holochain link tag）"
+                     :pred non-blank-string?}
+   :kotoba.link/author {:doc "CreateLink を署名した agent（did:key）"
+                        :pred did-key?}
+   :kotoba.link/seq {:doc "この graph の action log 上の単調番号。L2 CID は host が log を hash して付ける"
+                     :pred nat-int?}})
 
 (defn known-attribute? [attr]
   (contains? attributes attr))
