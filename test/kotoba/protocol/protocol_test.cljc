@@ -468,3 +468,68 @@
     (is (= [] (discover/lookup idx raw-cid)))
     (is (= :discovery (:plane (layers/owner-plane :ipni))))))
 
+;; ── L2: action log → chain commit CID ────────────────────────────────────────
+
+(defn- recording-commit
+  "Test double for chain.core/commit!. Maps each distinct log-state to the
+  next fixture CID. Same state → same CID (honest hasher). Does not hash."
+  [cids]
+  (let [seen (atom {})]
+    (fn [_prev state]
+      (or (get @seen state)
+          (let [cid (nth cids (count @seen))]
+            (swap! seen assoc state cid)
+            cid)))))
+
+(deftest commit-log-advances-graph-cid-only-for-actions
+  (let [commit (recording-commit [raw-cid other-raw-cid])
+        st (graph/put-node (graph/store) {:cid cid :body "A"})
+        linked (graph/create-link st {:from cid :to raw-cid :author did})
+        sealed (graph/commit-log linked commit)]
+    (is (true? (:log-dirty? linked)))
+    (is (nil? (:graph-cid linked))
+        "seq is not a CID. L2 does not exist until commit-log")
+    (is (false? (:log-dirty? sealed)))
+    (is (= raw-cid (:graph-cid sealed)))
+    (is (graph/nodes-unchanged? linked sealed)
+        "sealing the log is merkle of the log, not of entries")
+    (is (= [] (vocab/validate-entity (graph/snapshot sealed))))
+    (is (= {"seq" 1 "actions" [{"from" cid "to" raw-cid "seq" 1 "author" did}]}
+           (graph/log-state linked)))
+    (testing "idempotent seal does not call a hasher that would change CID"
+      (is (= sealed (graph/commit-log sealed (recording-commit [other-raw-cid])))))
+    (testing "merkle put does not dirty the action log"
+      (let [child (graph/merkle-child (graph/node sealed cid) raw-cid)
+            with-merkle (graph/put-node sealed (assoc child :cid other-raw-cid))]
+        (is (false? (:log-dirty? with-merkle)))
+        (is (= raw-cid (:graph-cid with-merkle)))))
+    (testing "a second overlay write must get a new graph CID"
+      (let [linked2 (graph/create-link sealed {:from cid :to other-raw-cid})
+            sealed2 (graph/commit-log linked2 commit)]
+        (is (true? (:log-dirty? linked2)))
+        (is (= raw-cid (:graph-cid linked2))
+            "dirty snapshot still names the last sealed CID")
+        (is (= other-raw-cid (:graph-cid sealed2)))
+        (is (not= (:graph-cid sealed) (:graph-cid sealed2)))))))
+
+(deftest commit-log-rejects-a-hasher-that-does-not-advance
+  (let [st (-> (graph/store)
+               (graph/put-node {:cid cid :body "A"})
+               (graph/create-link {:from cid :to raw-cid})
+               (graph/commit-log (constantly raw-cid))
+               (graph/create-link {:from cid :to other-raw-cid}))]
+    (is (= :graph-cid-unchanged
+           (:error (graph/commit-log st (constantly raw-cid))))
+        "same CID for a dirty log means the hasher ignored the new actions"))
+  (is (= :commit-fn-required
+         (:error (graph/commit-log
+                  (graph/create-link (graph/store)
+                                     {:from cid :to raw-cid})
+                  nil))))
+  (is (= :invalid-graph-cid
+         (:error (graph/commit-log
+                  (graph/create-link (graph/store)
+                                     {:from cid :to raw-cid})
+                  (constantly "not-a-cid"))))))
+
+

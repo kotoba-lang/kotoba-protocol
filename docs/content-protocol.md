@@ -28,7 +28,9 @@ CreateLink だけにすると、配布物の closure を 1 個の CID で検証�
 
 - `put-node` — 同じ CID に違う merkle-links を入れると `:cid-mismatch`
 - `merkle-child` — 親を変えた *新しい* ノード。同じ CID では put できない
-- `create-link` — ノード map は `=` のまま。`:log-head` だけ進む
+- `create-link` — ノード map は `=` のまま。`:log-head` だけ進む。`:log-dirty?` が立つ
+- `log-state` / `commit-log` — dirty な action log を L2 graph CID にする。hasher は
+  `chain.core/commit!`（この repo は hash しない）。merkle put は log を dirty にしない
 - `neighbors` / `walk` — 種類を分けて辿る。A に CreateLink で B を足しても
   merkle walk は B に届かない
 

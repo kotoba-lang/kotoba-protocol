@@ -63,7 +63,7 @@ datom が CreateLink 相当。IPLD link が git tree 相当。
 
 - `kotoba.protocol.layers` — `layers` / `planes` / `link-kinds` / `owner-of` / `owner-plane`
 - `kotoba.protocol.ref` — `ipfs://{cidv1}` \| `ipns://{k51}`。path は identity ではない
-- `kotoba.protocol.graph` — 2 種の link の参照代数。merkle は親 CID を変える、action は変えない
+- `kotoba.protocol.graph` — 2 種の link の参照代数。`commit-log` が L2 graph CID（hasher は `chain.core/commit!`）
 - `kotoba.protocol.address` — output vs input。Holochain の Entry/Action/Dna/Agent は *of-what*
 - `kotoba.protocol.surfaces` — URL / DNS / HTTP / Git / pkg / RPC を 8 面へ投影。1 DAG に畳まない
 - `kotoba.protocol.discover` — IPNI / provider record。CID を書き換えない
