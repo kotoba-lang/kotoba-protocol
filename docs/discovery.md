@@ -19,8 +19,14 @@ DHT node になることではない。IPNI を足すなら同じ discovery adap
 差し替えるだけ。identity の再設計ではない。
 
 レコード代数は `kotoba.protocol.discover`（`advertise` / `lookup`）。
-live の継ぎ目は `lookup-live`（finder は注入。protocol は kad に依存しない）。
-provider を足しても CID は同じ。
+live の継ぎ目は `lookup-live`（finder は注入）と `advertise-live`（putter は注入）。
+protocol は kad に依存しない。provider を足しても CID は同じ。
+
+**読みは spec、書きは historic。** `GET /routing/v1/providers/{cid}` は
+Delegated Routing V1 にある。`PUT /routing/v1/providers` は spec に無い
+（IPNI / index-provider の bitswap envelope。CID は URL ではなく
+`Payload.Keys`。IPIP-378 の POST は着地せず閉じた）。署名も時計も kad は
+持たない。router が署名を要求して 400 を返すのは失敗であって、黙った成功ではない。
 
 ## 他の index
 

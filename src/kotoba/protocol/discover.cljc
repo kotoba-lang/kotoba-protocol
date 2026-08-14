@@ -1,13 +1,15 @@
 (ns kotoba.protocol.discover
-  "Discovery plane: CID → who serves it (ADR-2608145200 / ADR-2608145500).
+  "Discovery plane: CID → who serves it (ADR-2608145200 / ADR-2608145500 /
+  ADR-2608145600).
 
   IPNI / Bitswap provider records / kad GET_PROVIDERS live here.
   A record does not change the CID. Putting a provider is not a merkle
   rewrite and not an overlay edge between entries.
 
-  `advertise` / `lookup` are the in-memory algebra. `lookup-live` is the
-  injected seam: production binds
-  `(fn [cid] (kad.routing/find-providers http-fn cid opts))`.
+  `advertise` / `lookup` are the in-memory algebra.
+  `lookup-live` binds `(fn [cid] (kad.routing/find-providers http-fn cid opts))`.
+  `advertise-live` binds `(fn [rec] (kad.routing/provide http-fn rec opts))`.
+  Provide over HTTP is the historic IPNI PUT, not a routing-v1 write.
   This ns does not require kad. Do not put IPNI into the public URI.
   Do not create an IPNI repo to hold this adapter."
   (:require [kotoba.protocol.vocab :as vocab]))
@@ -94,6 +96,42 @@
           :else {:error :invalid-finder-result :value r}))
       (catch #?(:clj Exception :cljs :default) e
         {:error :finder-error
+         :detail #?(:clj (.getMessage e) :cljs (str e))}))))
+
+(defn advertise-live
+  "Publish a provider record through an injected putter. Does not rewrite
+  the CID.
+
+  `putter-fn` is `(fn [rec] -> {:ok? :cid :accepted …})`. Production:
+
+      (fn [rec]
+        (kad.routing/provide http-fn rec opts))
+
+  A putter that returns a different `:cid` is `:cid-mismatch`.
+  `:ok? false` is \"no router accepted\" — not a silent pass.
+  This ns does not depend on kad."
+  [rec putter-fn]
+  (cond
+    (:error rec) rec
+    (not (map? rec)) {:error :invalid-record :value rec}
+    (not (vocab/cid? (:cid rec))) {:error :invalid-cid :value (:cid rec)}
+    (not (ifn? putter-fn)) {:error :putter-fn-required}
+    :else
+    (try
+      (let [r (putter-fn rec)]
+        (cond
+          (and (map? r) (:error r)) r
+          (and (map? r) (false? (:ok? r))) r
+          (and (map? r) (:ok? r)
+               (:cid r) (not= (:cid rec) (:cid r)))
+          {:error :cid-mismatch :asked (:cid rec) :got (:cid r)}
+          (and (map? r) (:ok? r))
+          (merge rec {:live? true
+                      :accepted (:accepted r)
+                      :mutates-cid? false})
+          :else {:error :invalid-putter-result :value r}))
+      (catch #?(:clj Exception :cljs :default) e
+        {:error :putter-error
          :detail #?(:clj (.getMessage e) :cljs (str e))}))))
 
 (defn cids
