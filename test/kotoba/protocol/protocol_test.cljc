@@ -32,7 +32,34 @@
   (is (= :l0-address (:layer (layers/owner-of :ipld-link)))
       "IPLD link は CID をノード内に持つ。URI path ではない")
   (is (= :l4-distribution (:layer (layers/owner-of :gateway-projection)))
-      "HTTPS gateway は retrieval。identity ではない"))
+      "HTTPS gateway は retrieval。identity ではない")
+  (is (= :l0-address (:layer (layers/owner-of :output-address))))
+  (is (= :l1-fact (:layer (layers/owner-of :action-link)))
+      "Holochain CreateLink / datom は親 CID を変えない")
+  (is (= :l4-distribution (:layer (layers/owner-of :ipni)))
+      "IPNI は discovery。identity ではない"))
+
+(deftest planes-are-the-eight-communication-faces
+  (is (= [:identity :naming :routing :discovery :transport :session :authorization :content-protocol]
+         (mapv :plane layers/planes)))
+  (testing "every concern also names a plane"
+    (doseq [[concern _] layers/concerns]
+      (is (some? (layers/owner-plane concern)) (str concern))))
+  (testing "every plane points at a split README"
+    (doseq [p layers/planes]
+      (is (re-find #"^docs/.+\.md$" (:readme p)) (:plane p)))))
+
+(deftest two-link-kinds-are-not-the-same-edge
+  (is (true? (get-in layers/link-kinds [:merkle :mutates-parent?])))
+  (is (false? (get-in layers/link-kinds [:action :mutates-parent?])))
+  (is (= :block (get-in layers/link-kinds [:merkle :stored-in])))
+  (is (= :signed-metadata (get-in layers/link-kinds [:action :stored-in])))
+  (is (= :content-protocol (:plane (layers/owner-plane :merkle-link))))
+  (is (= :content-protocol (:plane (layers/owner-plane :action-link))))
+  (is (= :discovery (:plane (layers/owner-plane :ipni)))
+      "IPNI は CID を書き換えない索引")
+  (is (= :identity (:plane (layers/owner-plane :input-address)))
+      "input-addressed recipe も identity 面。naming ではない"))
 
 ;; ── vocab ────────────────────────────────────────────────────────────────────
 
