@@ -12,8 +12,12 @@
   - actor    = wasm actor 本体 (:kotoba.app/wasm, kototama actor:host ABI)
 
   mount の手段 (iframe / web component / native) は host の実装詳細であり
-  protocol は関知しない。"
+  protocol は関知しない。
+
+  公開 resource identity は `kotoba.protocol.ref`（ipfs://{cidv1} |
+  ipns://{k51}）。embed-url の path は identity ではない (ADR-2608145100)。"
   (:require [clojure.string :as str]
+            [kotoba.protocol.ref :as ref]
             [kotoba.protocol.vocab :as vocab]))
 
 ;; ── capability registry ──────────────────────────────────────────────────────
@@ -62,48 +66,41 @@
 ;; ── embed-url ────────────────────────────────────────────────────────────────
 
 (defn parse-embed-url
-  "embed-url → {:scheme :https|:ipfs|:ipns …} | {:error …}。
-  ipfs は {:cid :path}、ipns は {:name :path} を持つ。"
+  "embed-url → parsed map | {:error …}。
+
+  ipfs/ipns は `ref/parse` に委譲（canonical、path 不可）。
+  https は {:scheme :https :canonical? false} — location であって identity ではない。"
   [s]
   (cond
     (not (string? s)) {:error :not-a-string}
 
     (str/starts-with? s "https://")
-    {:scheme :https :url s}
+    {:scheme :https :url s :canonical? false}
 
-    (str/starts-with? s "ipfs://")
-    (let [rest (subs s 7)
-          [cid & path] (str/split rest #"/")]
-      (if (vocab/cid? cid)
-        {:scheme :ipfs :cid cid :path (when (seq path) (str "/" (str/join "/" path)))}
-        {:error :invalid-cid :value cid}))
-
-    (str/starts-with? s "ipns://")
-    (let [rest (subs s 7)
-          [name & path] (str/split rest #"/")]
-      (if (vocab/ipns-name? name)
-        {:scheme :ipns :name name :path (when (seq path) (str "/" (str/join "/" path)))}
-        {:error :invalid-ipns-name :value name}))
-
-    :else {:error :unknown-scheme :value s}))
+    :else
+    (let [r (ref/parse s)]
+      (if (:error r)
+        r
+        (cond-> {:scheme (:scheme r) :canonical? true}
+          (:cid r) (assoc :cid (:cid r))
+          (:name r) (assoc :name (:name r)))))))
 
 (defn resolve-embed-url
   "parse 済み embed-url → host が実際に開く URL と検証性。
   opts: {:gateway \"https://<host>\"} (L4 の retrieval endpoint)。
   :verifiable? — 取得内容を CID で検証できるか (https は不可、ipfs は可、
-  ipns は署名済みポインタ経由で可)。"
-  [{:keys [scheme url cid name path error]} {:keys [gateway]}]
+  ipns は署名済みポインタ経由で可)。gateway URL に path は付けない。"
+  [{:keys [scheme url cid name error] :as parsed} {:keys [gateway]}]
   (cond
     error {:error error}
     (= scheme :https) {:url url :verifiable? false}
-    (= scheme :ipfs) (if gateway
-                       {:url (str gateway "/ipfs/" cid (or path ""))
-                        :cid cid :verifiable? true}
-                       {:error :gateway-required})
-    (= scheme :ipns) (if gateway
-                       {:url (str gateway "/ipns/" name (or path ""))
-                        :ipns name :verifiable? true}
-                       {:error :gateway-required})
+    (#{:ipfs :ipns} scheme)
+    (if gateway
+      (let [g (ref/gateway-url parsed gateway)]
+        (cond-> {:url g :verifiable? true}
+          cid (assoc :cid cid)
+          name (assoc :ipns name)))
+      {:error :gateway-required})
     :else {:error :unknown-scheme}))
 
 ;; ── manifest ─────────────────────────────────────────────────────────────────

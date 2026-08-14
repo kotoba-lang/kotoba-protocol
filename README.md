@@ -21,6 +21,12 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
 ## Namespaces
 
 - `kotoba.protocol.layers` — 層表と関心事→層の対応（`owner-of`）。**data が spec**。
+  `:cid-ref` / `:ipld-link` は L0、`:ipns-ref` は L3、`:gateway-projection` は L4。
+- `kotoba.protocol.ref` — 公開 resource identity（ADR-2608145100）。
+  文法はちょうど 2 形: `ipfs://{cidv1}` と `ipns://{k51}`。path / query /
+  fragment / CIDv0 は identity ではない（git blob SHA、nix store hash、
+  holochain entry hash、unison term hash と同じ切る方）。リンクは IPLD
+  （ノード内の CID）。HTTPS gateway は L4 projection。
 - `kotoba.protocol.vocab` — datom 語彙 registry（`:kotoba.actor/*`
   `:kotoba.graph/*` `:kotoba.app/*`）+ 値述語 + `validate-entity`。
 - `kotoba.protocol.app` — L5 app モデル:
@@ -29,9 +35,13 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
     （Farcaster signed manifest / Matrix state event / Nostr NIP-89 の外付け
     機構が、graph の性質として得られる）。
   - **appview** = graph を描画する全画面 app（`:kotoba.app/appview-of`）。
-  - **embedUrl** = host が文脈内に mount する URL（`https|ipfs|ipns`、
-    `parse-embed-url` / `resolve-embed-url` が検証可能性込みで解決）。
-    mount 手段（iframe / web component）は host 実装詳細で protocol 外。
+  - **embedUrl** = host が文脈内に mount する URL。canonical は
+    `ipfs://{cid}` / `ipns://{k51}`。`https://…` は検証不能な location
+    （git remote 相当）。`parse-embed-url` / `resolve-embed-url` が検証可能性
+    込みで解決する。gateway URL に path は付けない。mount 手段（iframe /
+    web component）は host 実装詳細で protocol 外。
+  - `:kotoba.app/entry` は bundle 配下の **local name**（unison alias / IPLD
+    map key）。URI path ではない。
   - capability registry: kototama `actor:host` 8 imports（実装は
     kototama.contract / actor-host.js、guest module 名は `"kotoba"`）+
     host bridge caps（同期 ABI でブラウザ実装不能な `http-post` 系の代行 —
@@ -44,12 +54,12 @@ zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・
   CID⇄digest bytes の変換のみ。`parse-raw-cid` / `digest-matches?` は raw
   codec の単一バイナリ（wasm module 等）専用。`parse-cid` /
   `digest-matches-cid?` はその一般化 — raw/dag-pb/dag-cbor いずれの
-  multicodec でも digest 位置は同じなので codec を問わず比較できる
-  （dag-pb ディレクトリ CID の再帰検証で使う。dag-pb 自体の protobuf decode
-  はここでは行わない — zero deps を保つため host 側の仕事）。
+  multicodec でも digest 位置は同じなので codec を問わず比較できる。
+  dag-pb の protobuf decode と UnixFS directory walk はここでは行わない
+  （zero deps。公開 identity は CID そのもの — ADR-2608145100）。
   `base32-encode` / `parse-cid-bytes` / `cid-bytes->string` — CID⇄raw bytes
-  の相互変換 (dag-pb ノードの Link.Hash は生 bytes で来るので、fetch 可能な
-  CID 文字列に戻すのに使う)。
+  の相互変換 (IPLD Link.Hash は生 bytes で来るので、fetch 可能な CID
+  文字列に戻すのに使う)。
 
 ## atproto との関係
 
