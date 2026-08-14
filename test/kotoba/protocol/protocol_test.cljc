@@ -4,7 +4,11 @@
             [kotoba.protocol.bridge]
             [kotoba.protocol.cid :as cid-ns]
             [kotoba.protocol.layers :as layers]
+            [kotoba.protocol.ref :as ref]
             [kotoba.protocol.vocab :as vocab]))
+
+(def cid "bafybeidl5t4ztktqmfcqrfqpio6qf64n6t65a7inkz2pa6jq4tyqwfjfhy")
+(def ipns (str "k51qzi5uqu5d" (apply str (repeat 50 "a"))))
 
 ;; ── layers ───────────────────────────────────────────────────────────────────
 
@@ -20,7 +24,15 @@
       "IPNS 名は authority (鍵由来) の関心事")
   (is (= :l4-distribution (:layer (layers/owner-of :ipns-publish)))
       "IPNS の publish/resolve は distribution")
-  (is (= :l5-application (:layer (layers/owner-of :embed-url)))))
+  (is (= :l5-application (:layer (layers/owner-of :embed-url))))
+  (is (= :l0-address (:layer (layers/owner-of :cid-ref)))
+      "公開 CID は L0 identity")
+  (is (= :l3-authority (:layer (layers/owner-of :ipns-ref)))
+      "鍵由来 IPNS 名は authority")
+  (is (= :l0-address (:layer (layers/owner-of :ipld-link)))
+      "IPLD link は CID をノード内に持つ。URI path ではない")
+  (is (= :l4-distribution (:layer (layers/owner-of :gateway-projection)))
+      "HTTPS gateway は retrieval。identity ではない"))
 
 ;; ── vocab ────────────────────────────────────────────────────────────────────
 
@@ -32,7 +44,14 @@
   (is (not (vocab/cid? "not-a-cid")))
   (is (vocab/ipns-name? (str "k51qzi5uqu5d" (apply str (repeat 50 "a")))))
   (is (vocab/reverse-dns-id? "net.kotoba.mangaka"))
-  (is (not (vocab/reverse-dns-id? "mangaka"))))
+  (is (not (vocab/reverse-dns-id? "mangaka")))
+  (is (vocab/app-uri? (str "ipfs://" cid)))
+  (is (vocab/app-uri? (str "ipns://" ipns)))
+  (is (vocab/app-uri? "https://aozora.app/studio"))
+  (is (not (vocab/app-uri? (str "ipfs://" cid "/index.html")))
+      "path after CID is not identity")
+  (is (not (vocab/app-uri? (str "ipfs://" cid "?format=raw"))))
+  (is (not (vocab/app-uri? "ftp://x"))))
 
 (deftest entity-validation
   (is (= [] (vocab/validate-entity
@@ -45,28 +64,60 @@
          (:error (first (vocab/validate-entity {:kotoba.app/kind "widget"}))))
       "ActorFrame/widget は語彙に無い — appview | embed | actor のみ"))
 
+;; ── ref: public identity (ADR-2608145100) ────────────────────────────────────
+
+(deftest public-ref-is-cid-or-ipns-only
+  (testing "ipfs://{cidv1} round-trips; no path"
+    (let [uri (str "ipfs://" cid)
+          p (ref/parse uri)]
+      (is (= {:kind :cid :scheme :ipfs :cid cid} p))
+      (is (= uri (ref/emit p)))
+      (is (true? (ref/canonical-ref-uri? uri)))
+      (is (= (str "https://kotobase.net/ipfs/" cid)
+             (ref/gateway-url p "https://kotobase.net")))))
+  (testing "ipns://{k51} round-trips; no path"
+    (let [uri (str "ipns://" ipns)
+          p (ref/parse uri)]
+      (is (= {:kind :ipns :scheme :ipns :name ipns} p))
+      (is (= uri (ref/emit p)))
+      (is (= (str "https://kotobase.net/ipns/" ipns)
+             (ref/gateway-url p "https://kotobase.net")))))
+  (testing "selectors / locations are not identity"
+    (is (= :path-not-identity (:error (ref/parse (str "ipfs://" cid "/index.html")))))
+    (is (= :path-not-identity (:error (ref/parse (str "ipfs://" cid "/")))))
+    (is (= :query-not-identity (:error (ref/parse (str "ipfs://" cid "?format=raw")))))
+    (is (= :fragment-not-identity (:error (ref/parse (str "ipfs://" cid "#checkout")))))
+    (is (= :path-not-identity (:error (ref/parse (str "ipns://" ipns "/latest"))))))
+  (testing "CIDv0 is not a public URI label"
+    (is (= :invalid-cid
+           (:error (ref/parse "ipfs://QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"))))
+    (is (vocab/cid? "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG")
+        "L0 shape check still accepts historical CIDv0"))
+  (testing "https is not a canonical ref"
+    (is (= :unknown-scheme (:error (ref/parse "https://aozora.app/studio"))))))
+
 ;; ── app: embed-url ───────────────────────────────────────────────────────────
 
-(def cid "bafybeidl5t4ztktqmfcqrfqpio6qf64n6t65a7inkz2pa6jq4tyqwfjfhy")
-(def ipns (str "k51qzi5uqu5d" (apply str (repeat 50 "a"))))
-
 (deftest embed-url-parse-and-resolve
-  (is (= {:scheme :https :url "https://aozora.app/studio"}
+  (is (= {:scheme :https :url "https://aozora.app/studio" :canonical? false}
          (app/parse-embed-url "https://aozora.app/studio")))
-  (let [p (app/parse-embed-url (str "ipfs://" cid "/index.html"))]
-    (is (= :ipfs (:scheme p)))
-    (is (= cid (:cid p)))
-    (is (= "/index.html" (:path p)))
-    (testing "gateway resolution keeps verifiability"
-      (is (= {:url (str "https://kotobase.net/ipfs/" cid "/index.html")
+  (testing "canonical ipfs embed has no path"
+    (let [p (app/parse-embed-url (str "ipfs://" cid))]
+      (is (= {:scheme :ipfs :cid cid :canonical? true} p))
+      (is (nil? (:path p)))
+      (is (= {:url (str "https://kotobase.net/ipfs/" cid)
               :cid cid :verifiable? true}
              (app/resolve-embed-url p {:gateway "https://kotobase.net"})))
       (is (= {:error :gateway-required} (app/resolve-embed-url p {})))))
+  (testing "UnixFS-style path after CID is rejected"
+    (is (= :path-not-identity
+           (:error (app/parse-embed-url (str "ipfs://" cid "/index.html"))))))
   (testing "https is reachable but not content-verifiable"
     (is (= {:url "https://aozora.app/studio" :verifiable? false}
            (app/resolve-embed-url (app/parse-embed-url "https://aozora.app/studio") {}))))
   (testing "ipns = 署名済み可変ポインタ"
     (let [p (app/parse-embed-url (str "ipns://" ipns))]
+      (is (true? (:canonical? p)))
       (is (true? (:verifiable? (app/resolve-embed-url p {:gateway "https://kotobase.net"}))))))
   (is (= :unknown-scheme (:error (app/parse-embed-url "ftp://x"))))
   (is (= :invalid-cid (:error (app/parse-embed-url "ipfs://nope")))))

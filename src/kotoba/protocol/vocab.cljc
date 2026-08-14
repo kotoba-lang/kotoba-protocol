@@ -6,8 +6,12 @@
   :kotoba.app/*   — app manifest (actor が提供する appview / embed / actor-wasm)
 
   値の検証は述語ベース。retraction/所有の意味論は L1/L3 (layers) の責務で、
-  ここは属性と値形だけを定義する。"
-  (:require [clojure.string :as str]))
+  ここは属性と値形だけを定義する。
+
+  公開 resource URI の文法は `kotoba.protocol.ref`（ipfs://{cidv1} |
+  ipns://{k51}。path は identity ではない — ADR-2608145100）。"
+  (:require [clojure.string :as str]
+            [kotoba.protocol.ref :as ref]))
 
 ;; ── value predicates ─────────────────────────────────────────────────────────
 
@@ -23,9 +27,9 @@
                     (re-matches #"b[a-z2-7]{20,}" s)))))
 
 (defn ipns-name?
-  "鍵由来 IPNS 名 (libp2p-key, base36 k51…)。"
+  "鍵由来 IPNS 名 (libp2p-key, base36 k51…)。公開 URI は `ref/ipns-id?` と同じ形。"
   [s]
-  (boolean (and (string? s) (re-matches #"k51[a-z0-9]{50,}" s))))
+  (ref/ipns-id? s))
 
 (defn reverse-dns-id? [s]
   (boolean (and (string? s)
@@ -34,8 +38,14 @@
 (defn version? [s]
   (boolean (and (string? s) (re-matches #"\d+\.\d+\.\d+(-[A-Za-z0-9.-]+)?" s))))
 
-(defn app-uri? [s]
-  (boolean (and (string? s) (re-find #"^(https|ipfs|ipns)://\S+" s))))
+(defn app-uri?
+  "embed-url の値形。canonical は `ipfs://{cidv1}` | `ipns://{k51}`
+  （path/query/fragment 不可）。`https://…` は検証不能な location
+  （git remote 相当）として許可する。"
+  [s]
+  (boolean (and (string? s)
+                (or (re-matches #"https://\S+" s)
+                    (ref/canonical-ref-uri? s)))))
 
 (defn- non-blank-string? [s]
   (and (string? s) (not (str/blank? s))))
@@ -79,11 +89,11 @@
                         :pred version?}
    :kotoba.app/kind {:doc "appview = graph を描画する全画面 app / embed = host が文脈内 mount する UI / actor = wasm actor 本体"
                      :pred #{"appview" "embed" "actor"}}
-   :kotoba.app/bundle-cid {:doc "静的バンドル (dir) の root CID — 配信元が何であれ内容はこれで検証する"
+   :kotoba.app/bundle-cid {:doc "公開 resource の CID（git blob / nix store hash / holochain entry / unison term 相当）。dir root ではない。配信元が何であれ内容はこれで検証する"
                            :pred cid?}
-   :kotoba.app/entry {:doc "bundle 内 entry path (例 index.html)"
+   :kotoba.app/entry {:doc "bundle CID 配下の local name（unison alias / git tree key / IPLD map key）。URI path ではない。leaf は独自 CID を持つ"
                       :pred non-blank-string?}
-   :kotoba.app/embed-url {:doc "mount 可能 URL (https:// | ipfs://<cid>[/p] | ipns://<name>[/p])。mount 手段 (iframe/web-component) は host 実装詳細で protocol 外"
+   :kotoba.app/embed-url {:doc "canonical: ipfs://<cidv1> | ipns://<k51>。https://… は unverifiable location。path は identity ではない。mount 手段 (iframe/web-component) は host 実装詳細で protocol 外"
                           :pred app-uri?}
    :kotoba.app/appview-of {:doc "appview が描画する対象の selector (graph 名 / 属性 namespace 群) — EDN"
                            :pred (fn [v] (or (map? v) (vector? v) (string? v)))}

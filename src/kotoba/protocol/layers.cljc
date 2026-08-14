@@ -58,7 +58,11 @@
    :host-caps :l5-application
    :app-manifest :l5-application
    :appview :l5-application
-   :embed-url :l5-application})
+   :embed-url :l5-application
+   :cid-ref :l0-address
+   :ipns-ref :l3-authority
+   :ipld-link :l0-address
+   :gateway-projection :l4-distribution})
 
 (defn layer
   "層 keyword → 層エントリ | nil。"

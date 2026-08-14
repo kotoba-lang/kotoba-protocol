@@ -1,6 +1,6 @@
 (ns kotoba.protocol.cid
   "CIDv1/sha2-256 の digest 抽出 + 比較 (ADR-2607071500 Addendum 4/6:
-  bundle-cid integrity + dag-pb ディレクトリ検証)。
+  bundle-cid integrity + 任意 codec の digest 比較)。
 
   ハッシュ計算そのものは host の仕事 (browser の js/crypto.subtle.digest,
   JVM の MessageDigest) — ここは pure な CID⇄digest bytes の変換だけを持つ。
@@ -11,8 +11,8 @@
   `[version-varint codec-varint hash-fn-varint digest-len-varint …digest]`
   で、codec varint だけが変わる) ため、codec を問わず digest 比較できる。
   dag-pb 自体の protobuf decode はここでは行わない (zero deps を保つ —
-  decode は host 側の仕事、ここは digest 一致の判定と CID⇄bytes 変換
-  (`base32-encode` / `parse-cid-bytes` / `cid-bytes->string`) のみ)。"
+  decode は host 側の仕事)。UnixFS directory walk は公開 URI の文法ではない
+  (ADR-2608145100 — identity は CID そのもの、リンクは IPLD)。"
   (:require [clojure.string :as str]))
 
 (def ^:private b32-alphabet "abcdefghijklmnopqrstuvwxyz234567")
