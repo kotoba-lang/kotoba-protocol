@@ -58,7 +58,7 @@ datom が CreateLink 相当。IPLD link が git tree 相当。
 |---|---|---|
 | L0 address | bytes → CID | io-multiformats, io-ipld, dag-cbor |
 | L1 fact | datom（overlay edge もここ） | datom |
-| L2 graph | datom log の Merkle DAG → graph CID | kotobase-peer, chain, prolly-tree, mst |
+| L2 graph | action log の CID は `chain.core/commit!`（protocol は hash しない）。Location は raw でありうる | chain, kotoba.protocol.graph |
 | L3 authority | did:key、鍵由来 IPNS、CACAO | cacao, kotoba-auth, tech-ipfs-specs-ipns |
 | L4 distribution | 配布 + discovery | kotobase.net, ipfs-pinner, kad-dht |
 | L5 application | actor 実行と app manifest | kototama, this repo |

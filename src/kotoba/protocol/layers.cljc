@@ -30,7 +30,7 @@
 
    {:layer :l2-graph
     :name "graph"
-    :responsibility "datom log の Merkle DAG 化 → graph CID。db 名前空間 kotobase/db/<did>/<name>"
+    :responsibility "action log の L2 CID は chain.core/commit! が付ける（ADR-2608145400）。protocol は hash しない。CreateLink は overlay（親 CID 不変）。merkle put は parent CID を変えるが graph CID は動かない。archive Location は同じ bytes の raw CID でありうる（ADR-2608148200）。db 名前空間 kotobase/db/<did>/<name>"
     :impl-repos ["kotobase-peer" "chain" "prolly-tree" "mst" "arrangement"]}
 
    {:layer :l3-authority
@@ -116,6 +116,7 @@
    :datom :l1-fact
    :retraction :l1-fact
    :graph-cid :l2-graph
+   :action-log :l2-graph
    :merkle-dag :l2-graph
    :db-namespace :l2-graph
    :did-key :l3-authority
@@ -163,6 +164,7 @@
    :action-link :content-protocol
    :retraction :content-protocol
    :graph-cid :content-protocol
+   :action-log :content-protocol
    :app-manifest :content-protocol
    :embed-url :content-protocol
    :ipns-naming :naming
