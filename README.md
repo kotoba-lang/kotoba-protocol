@@ -1,73 +1,73 @@
 # kotoba-protocol
 
 主権データ基盤 **kotoba** の層と責務の正本（spec-first / pure `.cljc` /
-zero runtime deps）。Datomic モデルの datom・IPLD/CID・鍵由来 IPNS・IPFS
-配布・kototama actor 実行を **1 つの層表**に統合する。ADR-2607071500。
+zero runtime deps）。ADR-2607071500 / ADR-2608145100 / ADR-2608145200。
 
 実装は既存 repo 群に住む。この repo が持つのは**宣言（data）と検証（テスト）**
 だけで、drift はテストで露見させる。
 
-## Layers
+## 5 段（hash-addressed object network）
+
+```
+identity        content hash / CID          docs/identity.md
+    ↓
+structure       DAG / 2 種の link           docs/content-protocol.md
+    ↓
+mutable name    ref / IPNS / branch         docs/naming.md
+    ↓
+discovery       DHT / IPNI / gossip         docs/discovery.md
+    ↓
+transport       TCP / QUIC / WebRTC / Tor   docs/transport.md
+```
+
+path はどの段でも identity にしない。
+
+## 8 面（URL / DNS / HTTP / Git / pkg / RPC の落とし先）
+
+L0–L5 と直交する。1 つの Merkle DAG に全部畳まない。
+
+| 面 | README | 既存系の例 |
+|---|---|---|
+| identity | [docs/identity.md](docs/identity.md) | git blob, CID, EntryHash, drv/NAR |
+| naming | [docs/naming.md](docs/naming.md) | git ref, IPNS, DNS, package tag |
+| routing | [docs/routing.md](docs/routing.md) | kad lookup |
+| discovery | [docs/discovery.md](docs/discovery.md) | IPNI, providers |
+| transport | [docs/transport.md](docs/transport.md) | TCP/QUIC, HTTPS gateway |
+| session | [docs/mux-and-head.md](docs/mux-and-head.md) | Noise/Yamux, source-chain head |
+| authorization | [docs/who-may-write.md](docs/who-may-write.md) | CACAO, governor |
+| content protocol | [docs/content-protocol.md](docs/content-protocol.md) | IPLD merkle **and** datom/CreateLink |
+
+正本は `kotoba.protocol.layers` の `planes` / `link-kinds`。
+
+## Holochain との切り方
+
+相性が良いのは **overlay**（CreateLink = 後から足せる signed edge、親 CID 不変）。
+置き換えないのは **merkle**（配布物の closure を 1 CID で検証する）。
+ランタイムとしての conductor と無順序 DHT は採らない（ADR-2608038000）。
+datom が CreateLink 相当。IPLD link が git tree 相当。
+
+## L0–L5（データ梯子）
 
 | 層 | 責務 | 実装 |
 |---|---|---|
-| L0 address | bytes → CID（multiformats / IPLD dag-cbor） | io-multiformats, io-ipld, dag-cbor |
-| L1 fact | datom `[e a v tx added?]`（append-only、retraction も事実） | datom |
+| L0 address | bytes → CID | io-multiformats, io-ipld, dag-cbor |
+| L1 fact | datom（overlay edge もここ） | datom |
 | L2 graph | datom log の Merkle DAG → graph CID | kotobase-peer, chain, prolly-tree, mst |
-| L3 authority | Ed25519 did:key、**graph 名 = 鍵由来 IPNS 名**、CACAO capability chain。サーバは authority ではない | kotobase.cacao/cid, kotoba-auth, tech-ipfs-specs-ipns |
-| L4 distribution | CID 実体の配布（IPFS/pinning/B2）と IPNS head の publish | kotobase(.net), ipfs-pinner |
-| L5 application | actor 実行（kototama `actor:host` ABI）と app 提供（manifest / **appview** / **embedUrl**） | kototama, wasm-webcomponent, this repo |
+| L3 authority | did:key、鍵由来 IPNS、CACAO | cacao, kotoba-auth, tech-ipfs-specs-ipns |
+| L4 distribution | 配布 + discovery | kotobase.net, ipfs-pinner, kad-dht |
+| L5 application | actor 実行と app manifest | kototama, this repo |
 
 ## Namespaces
 
-- `kotoba.protocol.layers` — 層表と関心事→層の対応（`owner-of`）。**data が spec**。
-  `:cid-ref` / `:ipld-link` は L0、`:ipns-ref` は L3、`:gateway-projection` は L4。
-- `kotoba.protocol.ref` — 公開 resource identity（ADR-2608145100）。
-  文法はちょうど 2 形: `ipfs://{cidv1}` と `ipns://{k51}`。path / query /
-  fragment / CIDv0 は identity ではない（git blob SHA、nix store hash、
-  holochain entry hash、unison term hash と同じ切る方）。リンクは IPLD
-  （ノード内の CID）。HTTPS gateway は L4 projection。
-- `kotoba.protocol.vocab` — datom 語彙 registry（`:kotoba.actor/*`
-  `:kotoba.graph/*` `:kotoba.app/*`）+ 値述語 + `validate-entity`。
-- `kotoba.protocol.app` — L5 app モデル:
-  - **manifest** = actor 自身の graph に置く `:kotoba.app/*` datoms。graph
-    書込は L3 の CACAO 認可を通るので**署名済み・履歴付き**が構造的に付く
-    （Farcaster signed manifest / Matrix state event / Nostr NIP-89 の外付け
-    機構が、graph の性質として得られる）。
-  - **appview** = graph を描画する全画面 app（`:kotoba.app/appview-of`）。
-  - **embedUrl** = host が文脈内に mount する URL。canonical は
-    `ipfs://{cid}` / `ipns://{k51}`。`https://…` は検証不能な location
-    （git remote 相当）。`parse-embed-url` / `resolve-embed-url` が検証可能性
-    込みで解決する。gateway URL に path は付けない。mount 手段（iframe /
-    web component）は host 実装詳細で protocol 外。
-  - `:kotoba.app/entry` は bundle 配下の **local name**（unison alias / IPLD
-    map key）。URI path ではない。
-  - capability registry: kototama `actor:host` 8 imports（実装は
-    kototama.contract / actor-host.js、guest module 名は `"kotoba"`）+
-    host bridge caps（同期 ABI でブラウザ実装不能な `http-post` 系の代行 —
-    鍵も token も app には渡らない）。
-  - `bundle-cid-consistent?` — `:kotoba.app/bundle-cid` と ipfs:// scheme の
-    `:kotoba.app/embed-url` を両方持つ manifest は同一 CID を指すことを検証
-    （`validate-manifest` に組込み済み）。
-- `kotoba.protocol.cid` — CIDv1/sha2-256 の digest 抽出 + 比較。ハッシュ計算
-  自体は host の仕事（browser の `crypto.subtle.digest` 等）— ここは
-  CID⇄digest bytes の変換のみ。`parse-raw-cid` / `digest-matches?` は raw
-  codec の単一バイナリ（wasm module 等）専用。`parse-cid` /
-  `digest-matches-cid?` はその一般化 — raw/dag-pb/dag-cbor いずれの
-  multicodec でも digest 位置は同じなので codec を問わず比較できる。
-  dag-pb の protobuf decode と UnixFS directory walk はここでは行わない
-  （zero deps。公開 identity は CID そのもの — ADR-2608145100）。
-  `base32-encode` / `parse-cid-bytes` / `cid-bytes->string` — CID⇄raw bytes
-  の相互変換 (IPLD Link.Hash は生 bytes で来るので、fetch 可能な CID
-  文字列に戻すのに使う)。
+- `kotoba.protocol.layers` — `layers` / `planes` / `link-kinds` / `owner-of` / `owner-plane`
+- `kotoba.protocol.ref` — `ipfs://{cidv1}` \| `ipns://{k51}`。path は identity ではない
+- `kotoba.protocol.vocab` — `:kotoba.actor/*` `:kotoba.graph/*` `:kotoba.app/*`
+- `kotoba.protocol.app` — L5 manifest / embed-url / caps
+- `kotoba.protocol.cid` — CIDv1 digest。UnixFS walk はしない
 
-## atproto との関係
+## atproto
 
-atproto 互換は [`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol)
-— **kotoba-protocol の上に立つ投影層**。lexicon/record/XRPC/handle は
-あちらが所有し、鍵・datom の真実・CID/IPNS・配布はこちらに委譲する。
-旧 W-Protocol の profile 拡張（performerType/uiType 等）は atprotocol 側の
-deprecated compat alias に降格した。
+[`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol) は投影層。
 
 ## Dev
 

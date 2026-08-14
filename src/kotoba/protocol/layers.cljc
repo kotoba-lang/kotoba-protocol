@@ -1,9 +1,21 @@
 (ns kotoba.protocol.layers
-  "kotoba-protocol の層と責務の正本 (ADR-2607071500)。
+  "kotoba-protocol の層と責務の正本 (ADR-2607071500, ADR-2608145200)。
 
   この表が spec の本体であり、README/SPEC はここから読める narrative、
   テストはこの data を検証する。実装は既存 repo 群に住み、この repo は
-  宣言と検証だけを持つ (drift はテストで露見させる)。")
+  宣言と検証だけを持つ (drift はテストで露見させる)。
+
+  二つの直交する表がある。混ぜない:
+
+  - `layers`  — L0–L5。datom / CID / IPNS / actor の *データ* 梯子
+  - `planes`  — identity / naming / routing / discovery / transport /
+                session / authorization / content-protocol。
+                URL・DNS・HTTP・Git・pkg・RPC を落とす *通信* 面
+
+  5 段の hash-addressed object network
+  (identity → structure → naming → discovery → transport) は
+  planes の部分集合。structure は content-protocol の中の 2 種の link
+  (`link-kinds`) であって、独立の公開 URI ではない。" )
 
 (def layers
   [{:layer :l0-address
@@ -13,7 +25,7 @@
 
    {:layer :l1-fact
     :name "fact"
-    :responsibility "datom [e a v tx added?] — Datomic モデル。事実は append-only、retraction も事実"
+    :responsibility "datom [e a v tx added?] — Datomic モデル。事実は append-only、retraction も事実。Holochain CreateLink 相当の overlay edge もここに落ちる（親 CID は変わらない）"
     :impl-repos ["datom"]}
 
    {:layer :l2-graph
@@ -28,13 +40,73 @@
 
    {:layer :l4-distribution
     :name "distribution"
-    :responsibility "CID 実体の配布 (IPFS retrieval/pinning、B2 offload) と IPNS head の publish/resolve"
-    :impl-repos ["kotobase (kotobase.net)" "ipfs-pinner"]}
+    :responsibility "CID 実体の配布 (IPFS retrieval/pinning、B2 offload) と IPNS head の publish/resolve。discovery (IPNI / kad providers) もこの層の retrieval 面"
+    :impl-repos ["kotobase (kotobase.net)" "ipfs-pinner" "io-libp2p-specs-kad-dht"]}
 
    {:layer :l5-application
     :name "application"
     :responsibility "actor 実行 (kototama actor:host ABI + HostCaps/RuntimeLimits) と app 配布/提供 (manifest datoms / appview / embedUrl)"
     :impl-repos ["kototama" "wasm-webcomponent" "kotoba-protocol (vocab/app)"]}])
+
+(def planes
+  "通信面。L0–L5 と直交する。README は plane ごとに 1 ファイル。"
+  [{:plane :identity
+    :readme "docs/identity.md"
+    :responsibility "何が同じ対象か。出力アドレス = CID (hash of bytes)。入力アドレス = recipe/call の CID (hash of inputs)。公開 URI は ipfs://{cidv1}"
+    :impl-repos ["io-multiformats" "kotoba-protocol (ref/cid)"]}
+
+   {:plane :naming
+    :readme "docs/naming.md"
+    :responsibility "可変名。git ref / IPNS / unison namespace / DNS。名前は hash ではない。公開 URI は ipns://{k51}"
+    :impl-repos ["tech-ipfs-specs-ipns" "kotoba-protocol (ref)"]}
+
+   {:plane :routing
+    :readme "docs/routing.md"
+    :responsibility "この CID / 名を誰が持っているかへ近づく。kad lookup、delegated routing。packet routing ではない"
+    :impl-repos ["io-libp2p-specs-kad-dht"]}
+
+   {:plane :discovery
+    :readme "docs/discovery.md"
+    :responsibility "index。IPNI / provider records / gossip of warrants。identity でも naming でもない"
+    :impl-repos ["io-libp2p-specs-kad-dht"]}
+
+   {:plane :transport
+    :readme "docs/transport.md"
+    :responsibility "bytes を隣へ運ぶ。TCP / QUIC / WebRTC / Tor / relay / WebSocket。multiaddr。identity を持たない"
+    :impl-repos ["io-libp2p-specs-transport" "libp2p" "noise"]}
+
+   {:plane :session
+    :readme "docs/mux-and-head.md"
+    :responsibility "認証済みストリームと因果の先端。Noise / Yamux / source-chain head / inga quorum cert"
+    :impl-repos ["noise" "inga" "kotoba-auth"]}
+
+   {:plane :authorization
+    :readme "docs/who-may-write.md"
+    :responsibility "誰が overlay を書いてよいか。CACAO / governor / Holochain membrane 相当。サーバは authority ではない"
+    :impl-repos ["kotoba-auth" "cacao"]}
+
+   {:plane :content-protocol
+    :readme "docs/content-protocol.md"
+    :responsibility "object の形と 2 種の link。merkle (親 CID が変わる) と action/overlay (親 CID は変わらない)。datom / IPLD / app manifest"
+    :impl-repos ["io-ipld" "datom" "kotoba-protocol (app)"]}])
+
+(def link-kinds
+  "structure 面の 2 種。IPLD と Holochain を混ぜないための切る方。
+
+   :merkle — edge は block の中身。親を変えると CID が変わる (git tree, IPLD, nix closure)
+   :action — edge は署名済み metadata。親 CID は不変 (Holochain CreateLink, datom assertion)
+
+   IPNS は :action の退化形 (1 name → 1 CID)。DHT 上の graph DB にするなら :action。"
+  {:merkle {:mutates-parent? true
+            :stored-in :block
+            :analogues [:ipld-link :git-tree :nix-drv-closure]
+            :plane :content-protocol
+            :layer :l0-address}
+   :action {:mutates-parent? false
+            :stored-in :signed-metadata
+            :analogues [:holochain-create-link :datom-assertion :ipns-name]
+            :plane :content-protocol
+            :layer :l1-fact}})
 
 (def concerns
   "関心事 → 属する層。owner-of で引く。"
@@ -62,14 +134,64 @@
    :cid-ref :l0-address
    :ipns-ref :l3-authority
    :ipld-link :l0-address
-   :gateway-projection :l4-distribution})
+   :gateway-projection :l4-distribution
+   :output-address :l0-address
+   :input-address :l0-address
+   :merkle-link :l0-address
+   :action-link :l1-fact
+   :ipni :l4-distribution
+   :kad-dht :l4-distribution})
+
+(def plane-of
+  "関心事 → 属する通信面。owner-plane で引く。"
+  {:cid :identity
+   :cid-ref :identity
+   :output-address :identity
+   :input-address :identity
+   :ipld :content-protocol
+   :ipld-link :content-protocol
+   :merkle-link :content-protocol
+   :merkle-dag :content-protocol
+   :datom :content-protocol
+   :action-link :content-protocol
+   :retraction :content-protocol
+   :graph-cid :content-protocol
+   :app-manifest :content-protocol
+   :embed-url :content-protocol
+   :ipns-naming :naming
+   :ipns-ref :naming
+   :db-namespace :naming
+   :kad-dht :routing
+   :ipni :discovery
+   :ipfs-retrieval :discovery
+   :pinning :discovery
+   :ipns-publish :discovery
+   :blob-offload :transport
+   :gateway-projection :transport
+   :multiformats :identity
+   :did-key :authorization
+   :cacao :authorization
+   :write-authorization :authorization
+   :host-caps :authorization
+   :actor-execution :session
+   :appview :session})
 
 (defn layer
   "層 keyword → 層エントリ | nil。"
   [k]
   (first (filter #(= k (:layer %)) layers)))
 
+(defn plane
+  "通信面 keyword → 面エントリ | nil。"
+  [k]
+  (first (filter #(= k (:plane %)) planes)))
+
 (defn owner-of
   "関心事 keyword → それを所有する層エントリ | nil。"
   [concern]
   (some-> (concerns concern) layer))
+
+(defn owner-plane
+  "関心事 keyword → それを所有する通信面エントリ | nil。"
+  [concern]
+  (some-> (plane-of concern) plane))

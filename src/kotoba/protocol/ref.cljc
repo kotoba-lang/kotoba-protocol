@@ -26,9 +26,10 @@
   retrieval location (L4 projection / git remote analogue), parsed by
   `kotoba.protocol.app/parse-embed-url`, not by this ns.
 
-  IPLD links are CID values inside nodes (tag 42), not `ipfs://` strings
-  and not path segments. The leaf already has its own CID; walk the DAG
-  and name that CID.
+  Two link kinds (`kotoba.protocol.layers/link-kinds`): IPLD/git-tree
+  merkle links live *inside* the node (parent CID changes). Holochain
+  CreateLink / datom assertions are signed metadata (parent CID does not
+  change). Neither is a URI path. The leaf already has its own CID.
 
   Gateway `/ipfs/{cid}` is the IPFS HTTP namespace for 'get this block',
   not a UnixFS directory walk. `gateway-url` emits that projection; it
