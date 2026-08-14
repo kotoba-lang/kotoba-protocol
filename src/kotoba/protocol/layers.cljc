@@ -224,11 +224,11 @@
    :naming {:algebra :ready :live :ready :ns 'kotoba.protocol.naming}
    :routing {:algebra :ready :live :ready :ns 'kotoba.protocol.route}
    :discovery {:algebra :ready :live :ready :ns 'kotoba.protocol.discover}
-   :transport {:algebra :pending :live :blocked
+   :transport {:algebra :ready :live :blocked
                :blocked-until :dht-node-transport
-               :ns nil}
+               :ns 'kotoba.protocol.transport}
    :session {:algebra :pending :live :blocked
              :blocked-until :transport
-             :ns nil}
+             :ns nil} ; next tick: algebra. live still waits on a DHT node
    :authorization {:algebra :ready :live :n/a :ns 'kotoba.protocol.govern}
    :content-protocol {:algebra :ready :live :n/a :ns 'kotoba.protocol.graph}})

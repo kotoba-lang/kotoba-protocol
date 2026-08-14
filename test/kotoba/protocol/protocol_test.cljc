@@ -12,6 +12,7 @@
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.route :as route]
             [kotoba.protocol.surfaces :as surfaces]
+            [kotoba.protocol.transport :as transport]
             [kotoba.protocol.vocab :as vocab]))
 
 (def cid "bafybeidl5t4ztktqmfcqrfqpio6qf64n6t65a7inkz2pa6jq4tyqwfjfhy")
@@ -78,8 +79,12 @@
       "tick 1: IPNS GET/PUT is specified; live must not stay pending")
   (is (= :ready (get-in layers/plane-maturity [:authorization :algebra]))
       "tick 2: governor deny must be an algebra, not a README")
+  (is (= :ready (get-in layers/plane-maturity [:transport :algebra]))
+      "tick 3: a hop is not identity; tests must go red when it is")
   (is (= :blocked (get-in layers/plane-maturity [:transport :live]))
-      "this process is not a DHT node"))
+      "this process is not a DHT node")
+  (is (= :dht-node-transport
+         (get-in layers/plane-maturity [:transport :blocked-until]))))
 
 (deftest two-link-kinds-are-not-the-same-edge
   (is (true? (get-in layers/link-kinds [:merkle :mutates-parent?])))
@@ -732,6 +737,65 @@
                  (govern/intent {:author did :graph-owner did
                                  :from cid :to raw-cid
                                  :cacao {:depth 2 :resource :own-graph}}))))))
+
+;; ── transport (tick 3) ───────────────────────────────────────────────────────
+
+(def ^:private tcp-addr "/ip4/127.0.0.1/tcp/4001")
+(def ^:private quic-addr "/ip4/1.2.3.4/udp/4001/quic-v1")
+
+(deftest transport-hop-is-not-identity
+  (let [h (transport/hop {:addr tcp-addr :protocols ["/tcp"]})]
+    (is (= :transport (:plane h)))
+    (is (false? (:identity? h)))
+    (is (= tcp-addr (:addr h)))
+    (is (not (ref/canonical-ref-uri? (:addr h))))))
+
+(deftest transport-uri-is-not-a-hop
+  (is (= :not-a-multiaddr (:error (transport/hop {:addr (str "ipfs://" cid)}))))
+  (is (= :not-a-multiaddr (:error (transport/hop {:addr (str "ipns://" ipns)}))))
+  (is (= :not-a-multiaddr
+         (:error (transport/hop {:addr (str "https://ipfs.kotobase.net/ipfs/" cid)})))))
+
+(deftest transport-attach-does-not-rewrite-identity
+  (let [h (transport/hop {:addr quic-addr :protocols ["/quic-v1"]})
+        bound (transport/attach {:cid cid :peer routing-peer-id} h)]
+    (is (= cid (:cid bound)))
+    (is (= routing-peer-id (:peer bound)))
+    (is (false? (:identity? bound)))))
+
+(deftest transport-attach-cid-mismatch
+  (let [h (assoc (transport/hop {:addr tcp-addr}) :cid other-raw-cid)]
+    (is (= :cid-mismatch
+           (:error (transport/attach {:cid cid} h))))))
+
+(deftest transport-attach-peer-mismatch
+  (let [h (assoc (transport/hop {:addr tcp-addr}) :peer "12D3KooWother")]
+    (is (= :peer-mismatch
+           (:error (transport/attach {:peer routing-peer-id} h))))))
+
+(deftest transport-claiming-identity-is-denied
+  (let [h (assoc (transport/hop {:addr tcp-addr}) :identity? true)]
+    (is (= :transport-is-not-identity
+           (:error (transport/attach {:cid cid} h))))))
+
+(deftest transport-gateway-keeps-the-cid
+  (let [g (transport/gateway {:host "https://ipfs.kotobase.net" :cid cid})]
+    (is (= :gateway (:kind g)))
+    (is (false? (:identity? g)))
+    (is (= cid (:cid g)))
+    (is (= (str "https://ipfs.kotobase.net/ipfs/" cid) (:url g)))))
+
+(deftest transport-gateway-keeps-the-name
+  (let [g (transport/gateway {:host "https://ipfs.kotobase.net" :name ipns})]
+    (is (= ipns (:name g)))
+    (is (= (str "https://ipfs.kotobase.net/ipns/" ipns) (:url g)))))
+
+(deftest transport-dial-live-is-not-a-dht-node
+  (let [h (transport/hop {:addr tcp-addr})
+        out (transport/dial-live h)]
+    (is (= :not-a-dht-node (:error out)))
+    (is (= :dht-node-transport (:blocked-until out)))
+    (is (= h (:hop out)))))
 
 
 
