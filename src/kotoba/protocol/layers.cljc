@@ -140,7 +140,12 @@
    :merkle-link :l0-address
    :action-link :l1-fact
    :ipni :l4-distribution
-   :kad-dht :l4-distribution})
+   :kad-dht :l4-distribution
+   :entry-hash :l0-address
+   :action-hash :l0-address
+   :dna-hash :l0-address
+   :agent-pub-key :l3-authority
+   :unixfs-path :l0-address})
 
 (def plane-of
   "関心事 → 属する通信面。owner-plane で引く。"
@@ -174,7 +179,12 @@
    :write-authorization :authorization
    :host-caps :authorization
    :actor-execution :session
-   :appview :session})
+   :appview :session
+   :entry-hash :identity
+   :action-hash :identity
+   :dna-hash :identity
+   :agent-pub-key :authorization
+   :unixfs-path :identity})
 
 (defn layer
   "層 keyword → 層エントリ | nil。"

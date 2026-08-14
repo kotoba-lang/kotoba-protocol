@@ -1,10 +1,14 @@
 (ns kotoba.protocol.protocol-test
   (:require [clojure.test :refer [deftest is testing]]
+            [kotoba.protocol.address :as address]
             [kotoba.protocol.app :as app]
             [kotoba.protocol.bridge]
             [kotoba.protocol.cid :as cid-ns]
+            [kotoba.protocol.discover :as discover]
+            [kotoba.protocol.graph :as graph]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.ref :as ref]
+            [kotoba.protocol.surfaces :as surfaces]
             [kotoba.protocol.vocab :as vocab]))
 
 (def cid "bafybeidl5t4ztktqmfcqrfqpio6qf64n6t65a7inkz2pa6jq4tyqwfjfhy")
@@ -368,3 +372,99 @@
   (is (= "clock_monotonic" (app/cap->wasm-import "clock-monotonic")))
   (is (= "sha256-hex" (app/wasm-import->cap "sha256_hex")))
   (is (= "gen-keypair" (app/wasm-import->cap (app/cap->wasm-import "gen-keypair")))))
+
+(def did "did:key:z6MkoPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq")
+
+;; ── graph: merkle vs action (ADR-2608145200) ─────────────────────────────────
+
+(deftest action-link-does-not-mutate-parent-cid
+  (let [st (-> (graph/store)
+               (graph/put-node {:cid cid :body "A"})
+               (graph/put-node {:cid raw-cid :body "B"}))
+        after (graph/create-link st {:from cid :to raw-cid
+                                     :tag "mentions" :author did})]
+    (is (graph/nodes-unchanged? st after)
+        "CreateLink is DHT metadata. Entry A bytes stay A")
+    (is (= cid (:cid (graph/node after cid))))
+    (is (= #{} (:merkle (graph/neighbors after cid)))
+        "A does not contain B's hash")
+    (is (= #{raw-cid} (:action (graph/neighbors after cid))))
+    (is (= [cid] (graph/walk after cid {:kinds #{:merkle}})))
+    (is (= [cid raw-cid] (graph/walk after cid {:kinds #{:action}})))
+    (is (= (inc (:log-head st)) (:log-head after)))
+    (testing "overlay edges are L1 datoms that validate"
+      (doseq [e (graph/action-datoms after)]
+        (is (= [] (vocab/validate-entity e)))))))
+
+(deftest merkle-link-cannot-reuse-parent-cid
+  (let [st (graph/put-node (graph/store) {:cid cid :body "A"})
+        child (graph/merkle-child (graph/node st cid) raw-cid)]
+    (is (true? (:mutates-parent? child)))
+    (is (false? (:put-under-same-cid? child)))
+    (is (= :cid-mismatch
+           (:error (graph/put-node st (assoc child :cid cid))))
+        "embedding B inside A under the old CID is a CID lie")
+    (let [st2 (graph/put-node st (assoc child :cid other-raw-cid))]
+      (is (= #{raw-cid} (:merkle (graph/neighbors st2 other-raw-cid))))
+      (is (= #{} (:merkle (graph/neighbors st2 cid)))
+          "original A is still A")
+      (is (= [other-raw-cid raw-cid]
+             (graph/walk st2 other-raw-cid {:kinds #{:merkle}}))))))
+
+(deftest both-link-kinds-are-required
+  (is (not= (get-in layers/link-kinds [:merkle :mutates-parent?])
+            (get-in layers/link-kinds [:action :mutates-parent?]))))
+
+;; ── address: input vs output, Holochain kinds ────────────────────────────────
+
+(deftest output-and-input-are-both-identity
+  (is (= {:kind :output :cid cid :plane :identity} (address/output cid)))
+  (is (= {:kind :input :recipe-cid cid :plane :identity} (address/input cid)))
+  (is (= :output (:kind (address/recipe-as-output (address/input cid))))
+      "recipe bytes themselves have an output CID")
+  (is (= :identity (:plane (layers/owner-plane :input-address))))
+  (is (= :identity (:plane (layers/owner-plane :output-address)))))
+
+(deftest holochain-hashes-are-not-names
+  (is (= :identity (:plane (address/holochain-kind :entry-hash))))
+  (is (= :identity (:plane (address/holochain-kind :action-hash))))
+  (is (= :identity (:plane (address/holochain-kind :dna-hash))))
+  (is (= :authorization (:plane (address/holochain-kind :agent-pub-key))))
+  (is (= :action-link (:effect (address/holochain-kind :action-hash)))
+      "ActionHash is the CID of the signed action; the *effect* is overlay")
+  (is (not= :naming (:plane (address/holochain-kind :dna-hash)))
+      "DnaHash is bytes of the definition, not a DNA/role name")
+  (is (= :identity (:plane (layers/owner-plane :entry-hash))))
+  (is (= :authorization (:plane (layers/owner-plane :agent-pub-key)))))
+
+;; ── surfaces: do not smash URL/DNS/HTTP/Git/pkg/RPC into one DAG ─────────────
+
+(deftest surfaces-occupy-declared-planes
+  (is (true? (surfaces/every-plane-declared?)))
+  (is (false? (:identity? (surfaces/project :url))))
+  (is (false? (:identity? (surfaces/project :dns))))
+  (is (false? (:identity? (surfaces/project :http))))
+  (is (true? (:identity? (surfaces/project :git-blob))))
+  (is (= :merkle (:link (surfaces/project :git-tree))))
+  (is (= :action (:link (surfaces/project :git-ref))))
+  (is (= :input (:address (surfaces/project :pkg-drv))))
+  (is (= :output (:address (surfaces/project :pkg-nar))))
+  (is (= :input (:address (surfaces/project :rpc-call))))
+  (is (= :output (:address (surfaces/project :rpc-result))))
+  (is (true? (:rejected (surfaces/project :unixfs-path))))
+  (is (= #{:discovery} (surfaces/planes-of :ipni)))
+  (is (false? (:identity? (surfaces/project :ipni))))
+  (is (= :unknown-surface (:error (surfaces/project :ftp)))))
+
+;; ── discovery: IPNI does not rewrite the CID ─────────────────────────────────
+
+(deftest ipni-record-does-not-mutate-cid
+  (let [rec (discover/record {:cid cid :peer "12D3KooWpeer"
+                              :addrs ["/ip4/127.0.0.1/tcp/4001"]})
+        idx (discover/advertise (discover/index) rec)]
+    (is (false? (:mutates-cid? rec)))
+    (is (= :discovery (:plane rec)))
+    (is (= [rec] (discover/lookup idx cid)))
+    (is (= [] (discover/lookup idx raw-cid)))
+    (is (= :discovery (:plane (layers/owner-plane :ipni))))))
+
