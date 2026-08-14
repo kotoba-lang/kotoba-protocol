@@ -17,3 +17,10 @@ local name、DNS、Holochain の DNA/role 名がここに落ちる。
 
 IPNS は overlay link（`:action`）の退化形: 1 name → 1 CID。
 graph が要るなら datom / Holochain CreateLink 相当を使い、名前を増やさない。
+
+live の継ぎ目は `kotoba.protocol.naming/lookup-live` と `publish-live`。
+finder / putter は `kad.routing/resolve` / `publish`（`GET`/`PUT`
+`/routing/v1/ipns/{k51}`）。名前を書き換えたら `:name-mismatch`。
+値の CID が変わるのは正常 — それが名前の仕事。404 は
+`:not-found`（名前が無い）。全 router 沈黙は `:all-routers-failed`。
+混ぜない。この process は DHT node ではない。
