@@ -11,8 +11,12 @@
                Only the signed log grows. Parent CID does not change.
 
   Hashing bytes → CID is the host's job (see kotoba.protocol.cid).
-  log-head here is a monotonic seq, not a fake CID. L2 graph CID is
-  hash(actions) computed outside this ns."
+  L2 graph CID is a `chain.core/commit!` of `log-state`. This ns does
+  not hash and does not depend on chain — `commit-log` takes the
+  hasher as `commit-fn`:
+
+    (fn [prev-cid state]
+      (chain.core/commit! put! get-fn state prev-cid))"
   (:require [kotoba.protocol.layers :as layers]
             [kotoba.protocol.vocab :as vocab]))
 
@@ -20,7 +24,9 @@
   []
   {:nodes {}
    :actions []
-   :log-head 0})
+   :log-head 0
+   :graph-cid nil
+   :log-dirty? false})
 
 (defn- cid-set [xs]
   (into #{} xs))
@@ -32,6 +38,7 @@
   :cid-mismatch — that would be a merkle rewrite pretending not to be one."
   [st {:keys [cid body merkle-links]}]
   (cond
+    (:error st) st
     (not (vocab/cid? cid)) {:error :invalid-cid :value cid}
     (some (complement vocab/cid?) (or merkle-links #{}))
     {:error :invalid-merkle-link
@@ -71,6 +78,7 @@
   link to a hash that is not locally held). Author is did:key when present."
   [st {:keys [from to tag author]}]
   (cond
+    (:error st) st
     (not (vocab/cid? from)) {:error :invalid-cid :value from}
     (not (vocab/cid? to)) {:error :invalid-cid :value to}
     (and (some? author) (not (vocab/did-key? author)))
@@ -87,7 +95,7 @@
                   :stored-in (get-in layers/link-kinds [:action :stored-in])}]
       (-> st
           (update :actions conj action)
-          (assoc :log-head seq*)))))
+          (assoc :log-head seq* :log-dirty? true)))))
 
 (defn node
   [st cid]
@@ -140,3 +148,42 @@
             tag (assoc :kotoba.link/tag tag)
             author (assoc :kotoba.link/author author)))
         (:actions st)))
+
+(defn log-state
+  "Opaque `state` for chain.core/commit!. String keys so DAG-CBOR encode
+  does not depend on keyword round-trip. This is the action log, not the
+  L0 node map — merkle puts do not appear here."
+  [st]
+  {"seq" (:log-head st)
+   "actions" (mapv (fn [{:keys [from to tag author seq]}]
+                     (cond-> {"from" from "to" to "seq" seq}
+                       tag (assoc "tag" tag)
+                       author (assoc "author" author)))
+                   (:actions st))})
+
+(defn commit-log
+  "Seal the dirty action log as an L2 graph CID.
+
+  `commit-fn` is `(fn [prev-cid log-state] cid)`. Production binds
+  `chain.core/commit!`. A dirty log that hashes to the previous CID is
+  `:graph-cid-unchanged` — the hasher lied or the log did not change.
+  Idempotent when not dirty: does not call `commit-fn`."
+  [st commit-fn]
+  (cond
+    (:error st) st
+    (not (:log-dirty? st)) st
+    (not (ifn? commit-fn)) {:error :commit-fn-required}
+    :else
+    (let [prev (:graph-cid st)
+          cid (commit-fn prev (log-state st))]
+      (cond
+        (not (vocab/cid? cid)) {:error :invalid-graph-cid :value cid}
+        (and (some? prev) (= prev cid)) {:error :graph-cid-unchanged :cid cid}
+        :else (assoc st :graph-cid cid :log-dirty? false)))))
+
+(defn snapshot
+  "L2 entity for the sealed log. nil until the first successful commit-log."
+  [st]
+  (when (and (vocab/cid? (:graph-cid st)) (not (:log-dirty? st)))
+    {:kotoba.graph/name "overlay"
+     :kotoba.graph/cid (:graph-cid st)}))
