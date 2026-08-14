@@ -227,8 +227,8 @@
    :transport {:algebra :ready :live :blocked
                :blocked-until :dht-node-transport
                :ns 'kotoba.protocol.transport}
-   :session {:algebra :pending :live :blocked
+   :session {:algebra :ready :live :blocked
              :blocked-until :transport
-             :ns nil} ; next tick: algebra. live still waits on a DHT node
+             :ns 'kotoba.protocol.mux}
    :authorization {:algebra :ready :live :n/a :ns 'kotoba.protocol.govern}
    :content-protocol {:algebra :ready :live :n/a :ns 'kotoba.protocol.graph}})

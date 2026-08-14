@@ -8,6 +8,7 @@
             [kotoba.protocol.graph :as graph]
             [kotoba.protocol.govern :as govern]
             [kotoba.protocol.layers :as layers]
+            [kotoba.protocol.mux :as mux]
             [kotoba.protocol.naming :as naming]
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.route :as route]
@@ -84,7 +85,13 @@
   (is (= :blocked (get-in layers/plane-maturity [:transport :live]))
       "this process is not a DHT node")
   (is (= :dht-node-transport
-         (get-in layers/plane-maturity [:transport :blocked-until]))))
+         (get-in layers/plane-maturity [:transport :blocked-until])))
+  (is (= :ready (get-in layers/plane-maturity [:session :algebra]))
+      "tick 4: mux alive is not at-head; tests must go red when they collapse")
+  (is (= :blocked (get-in layers/plane-maturity [:session :live]))
+      "session live waits on transport live")
+  (is (= :transport
+         (get-in layers/plane-maturity [:session :blocked-until]))))
 
 (deftest two-link-kinds-are-not-the-same-edge
   (is (true? (get-in layers/link-kinds [:merkle :mutates-parent?])))
@@ -796,6 +803,57 @@
     (is (= :not-a-dht-node (:error out)))
     (is (= :dht-node-transport (:blocked-until out)))
     (is (= h (:hop out)))))
+
+;; ── mux / head (tick 4) ──────────────────────────────────────────────────────
+
+(deftest mux-alive-is-not-at-head
+  (let [m (mux/stream {:peer routing-peer-id :stream-id 1 :role :dialer :alive? true})
+        h (mux/head {:agent did :cid other-raw-cid})
+        s (mux/coords m h)]
+    (is (false? (:identity? s)))
+    (is (true? (get-in s [:mux :alive?])))
+    (is (false? (mux/at-head? cid s))
+        "a live stream does not make a stale head current")))
+
+(deftest mux-dead-can-still-be-at-head
+  (let [m (mux/stream {:peer routing-peer-id :stream-id 2 :role :listener :alive? false})
+        h (mux/head {:agent did :cid cid})
+        s (mux/coords m h)]
+    (is (true? (mux/at-head? cid s))
+        "head is independent of whether bytes are flowing")))
+
+(deftest mux-dialer-stream-id-must-be-odd
+  (is (= :stream-parity
+         (:error (mux/stream {:peer routing-peer-id :stream-id 2 :role :dialer})))))
+
+(deftest mux-stream-zero-is-reserved
+  (is (= :reserved-stream
+         (:error (mux/stream {:peer routing-peer-id :stream-id 0 :role :dialer})))))
+
+(deftest mux-attach-does-not-rewrite-peer
+  (let [m (mux/stream {:peer "12D3KooWother" :stream-id 1 :role :dialer})]
+    (is (= :peer-mismatch
+           (:error (mux/attach-peer routing-peer-id m))))))
+
+(deftest mux-place-call-requires-identity-first
+  (let [m (mux/stream {:peer routing-peer-id :stream-id 1 :role :dialer :alive? true})
+        h (mux/head {:agent did :cid cid})
+        s (mux/coords m h)]
+    (is (= :identity-required (:error (mux/place-call {} s))))
+    (is (= cid (:cid (mux/place-call {:cid cid} s))))))
+
+(deftest mux-host-string-is-not-a-head
+  (is (= :not-a-key
+         (:error (mux/head {:agent "kotobase.net" :cid cid})))))
+
+(deftest mux-open-live-is-not-a-dht-node
+  (let [m (mux/stream {:peer routing-peer-id :stream-id 1 :role :dialer :alive? true})
+        h (mux/head {:agent did :cid cid})
+        s (mux/coords m h)
+        out (mux/open-live s)]
+    (is (= :not-a-dht-node (:error out)))
+    (is (= :transport (:blocked-until out)))
+    (is (= s (:session out)))))
 
 
 
