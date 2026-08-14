@@ -57,8 +57,8 @@
 
    {:plane :naming
     :readme "docs/naming.md"
-    :responsibility "可変名。git ref / IPNS / unison namespace / DNS。名前は hash ではない。公開 URI は ipns://{k51}"
-    :impl-repos ["tech-ipfs-specs-ipns" "kotoba-protocol (ref)"]}
+    :responsibility "可変名。git ref / IPNS / unison namespace / DNS。名前は hash ではない。公開 URI は ipns://{k51}。live は delegated GET/PUT /ipns/{k51}"
+    :impl-repos ["tech-ipfs-specs-ipns" "kotoba-protocol (ref/naming)"]}
 
    {:plane :routing
     :readme "docs/routing.md"
@@ -125,6 +125,7 @@
    :ipfs-retrieval :l4-distribution
    :pinning :l4-distribution
    :ipns-publish :l4-distribution
+   :ipns-resolve :l4-distribution
    :blob-offload :l4-distribution
    :actor-execution :l5-application
    :host-caps :l5-application
@@ -172,7 +173,8 @@
    :ipni :discovery
    :ipfs-retrieval :discovery
    :pinning :discovery
-   :ipns-publish :discovery
+   :ipns-publish :naming
+   :ipns-resolve :naming
    :blob-offload :transport
    :gateway-projection :transport
    :multiformats :identity
@@ -207,3 +209,26 @@
   "関心事 keyword → それを所有する通信面エントリ | nil。"
   [concern]
   (some-> (plane-of concern) plane))
+
+(def plane-maturity
+  "Remaining-maturity scorecard (ADR-2608145800). Observable, not a wish.
+
+   :algebra — tests exist that go red when the plane's invariant is broken.
+   :live    — specified HTTP seam, injected, protocol does not depend on kad.
+              :n/a when the plane has no network op. :blocked names why
+              this process will not fake it.
+
+   Stop when every plane is :ready or :blocked/:n/a with a named reason.
+   Do not raise :live by becoming a DHT node in this repo."
+  {:identity {:algebra :ready :live :n/a :ns 'kotoba.protocol.ref}
+   :naming {:algebra :ready :live :ready :ns 'kotoba.protocol.naming}
+   :routing {:algebra :ready :live :ready :ns 'kotoba.protocol.route}
+   :discovery {:algebra :ready :live :ready :ns 'kotoba.protocol.discover}
+   :transport {:algebra :pending :live :blocked
+               :blocked-until :dht-node-transport
+               :ns nil}
+   :session {:algebra :pending :live :blocked
+             :blocked-until :transport
+             :ns nil}
+   :authorization {:algebra :pending :live :n/a :ns nil}
+   :content-protocol {:algebra :ready :live :n/a :ns 'kotoba.protocol.graph}})

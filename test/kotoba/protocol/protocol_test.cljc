@@ -7,6 +7,7 @@
             [kotoba.protocol.discover :as discover]
             [kotoba.protocol.graph :as graph]
             [kotoba.protocol.layers :as layers]
+            [kotoba.protocol.naming :as naming]
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.route :as route]
             [kotoba.protocol.surfaces :as surfaces]
@@ -44,7 +45,11 @@
   (is (= :l4-distribution (:layer (layers/owner-of :ipni)))
       "IPNI は discovery。identity ではない")
   (is (= :routing (:plane (layers/owner-plane :peer-lookup)))
-      "GET /peers は routing。discovery ではない"))
+      "GET /peers は routing。discovery ではない")
+  (is (= :naming (:plane (layers/owner-plane :ipns-publish)))
+      "PUT /ipns は naming。discovery ではない")
+  (is (= :naming (:plane (layers/owner-plane :ipns-resolve)))
+      "GET /ipns は naming。routing が代行しても面は naming"))
 
 (deftest planes-are-the-eight-communication-faces
   (is (= [:identity :naming :routing :discovery :transport :session :authorization :content-protocol]
@@ -55,6 +60,21 @@
   (testing "every plane points at a split README"
     (doseq [p layers/planes]
       (is (re-find #"^docs/.+\.md$" (:readme p)) (:plane p)))))
+
+(deftest plane-maturity-is-total-and-honest
+  (is (= (set (map :plane layers/planes))
+         (set (keys layers/plane-maturity))))
+  (doseq [[plane m] layers/plane-maturity]
+    (is (#{:ready :pending} (:algebra m)) (str plane " algebra"))
+    (is (#{:ready :pending :n/a :blocked} (:live m)) (str plane " live"))
+    (when (= :ready (:live m))
+      (is (symbol? (:ns m)) (str plane " live ready without a ns")))
+    (when (= :blocked (:live m))
+      (is (keyword? (:blocked-until m)) (str plane " blocked without a reason"))))
+  (is (= :ready (get-in layers/plane-maturity [:naming :live]))
+      "tick 1: IPNS GET/PUT is specified; live must not stay pending")
+  (is (= :blocked (get-in layers/plane-maturity [:transport :live]))
+      "this process is not a DHT node"))
 
 (deftest two-link-kinds-are-not-the-same-edge
   (is (true? (get-in layers/link-kinds [:merkle :mutates-parent?])))
@@ -545,6 +565,52 @@
   (is (= :all-routers-failed
          (:reason (route/lookup-live routing-peer-id
                                      (constantly {:ok? false :reason :all-routers-failed}))))))
+
+(deftest lookup-name-live-does-not-rewrite-name
+  (let [out (naming/lookup-live ipns
+                                (constantly {:ok? true
+                                             :record {:seq 1}
+                                             :value cid}))]
+    (is (= ipns (:name out)))
+    (is (= cid (:value out)))
+    (is (= :naming (:plane out)))
+    (is (false? (:mutates-name? out)))))
+
+(deftest lookup-name-live-rejects-a-finder-that-returns-a-different-name
+  (is (= :name-mismatch
+         (:error (naming/lookup-live ipns
+                                     (constantly {:plane :naming
+                                                  :name "k51qzi5uqu5dother"
+                                                  :mutates-name? false}))))))
+
+(deftest lookup-name-not-found-is-not-an-outage
+  (is (= :not-found
+         (:reason (naming/lookup-live ipns
+                                      (constantly {:ok? false :reason :not-found})))))
+  (is (= :all-routers-failed
+         (:reason (naming/lookup-live ipns
+                                      (constantly {:ok? false :reason :all-routers-failed})))))
+  (is (= :finder-fn-required (:error (naming/lookup-live ipns nil))))
+  (is (= :invalid-ipns-name (:error (naming/lookup-live "not-a-name" (constantly {}))))))
+
+(deftest publish-name-live-does-not-rewrite-name
+  (let [rec (naming/record {:name ipns :value cid})
+        out (naming/publish-live rec
+                                 (fn [r] {:ok? true :name (:name r)
+                                          :accepted ["https://r1"]}))]
+    (is (true? (:live? out)))
+    (is (= ipns (:name out)))
+    (is (false? (:mutates-name? out)))))
+
+(deftest publish-name-live-rejects-a-putter-that-returns-a-different-name
+  (let [rec (naming/record {:name ipns :value cid})]
+    (is (= :name-mismatch
+           (:error (naming/publish-live rec
+                                        (constantly {:ok? true :name "k51other"})))))
+    (is (= :rejected
+           (:reason (naming/publish-live rec
+                                         (constantly {:ok? false :reason :rejected})))))
+    (is (= :putter-fn-required (:error (naming/publish-live rec nil))))))
 
 ;; ── L2: action log → chain commit CID ────────────────────────────────────────
 
