@@ -1,16 +1,20 @@
-# mux and head
+# Mux and head
 
-ソケットが生きていることと、誰の chain の先端に居るかは別の座標。
+A live socket and the causal tip of an agent's chain are separate coordinates.
 
-- mux: Noise の握手のあと Yamux が切る stream。`io-libp2p-specs-transport`。
-- head: その agent が最後に署名した action / datom tx。Holochain source chain、
-  git HEAD、IPNS が指す graph CID、inga の quorum cert。
+- **mux** — an application stream opened by Yamux after a Noise handshake
+- **head** — the last signed action or graph CID claimed by an agent, analogous
+  to a Holochain source-chain head, Git HEAD, an IPNS graph CID, or an Inga
+  quorum certificate
 
-代数は `kotoba.protocol.mux`。`at-head?` は mux の生存を見ない。
-dialer の stream-id は奇数、listener は偶数、0 は予約。
-`open-live` はこの process では常に `:not-a-dht-node`。sockets は開かない。
-live は `:blocked-until :transport`（ADR-2608145800）。
+`kotoba.protocol.mux` makes the distinction executable. `at-head?` never uses
+stream liveness. Dialer stream IDs are odd, listener IDs are even, and stream 0
+is reserved for session control.
 
-call を graph に載せる手順は identity が先。stream を張るのはその後。
-誰が書いてよいかは `who-may-write.md`。
-この面の docs はこのファイル。`session.md` は作らない。
+This process does not open streams. `open-live` fails closed with
+`:not-a-dht-node`, and live maturity is blocked on transport
+(ADR-2608145800). Identity and authorization are established before transport;
+opening a stream does not grant permission to write.
+
+See [Who may write](who-may-write.md) for overlay authorization. This file is
+the session-plane document; there is intentionally no separate `session.md`.

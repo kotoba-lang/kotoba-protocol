@@ -1,19 +1,22 @@
-# transport
+# Transport
 
-**bytes を隣へ運ぶ。identity を持たない。**
+Transport moves **bytes to a neighbor**. It does not own identity.
 
-TCP / QUIC / WebRTC / Tor / relay / WebSocket。multiaddr。
-実装: `io-libp2p-specs-transport`、`noise`、`libp2p`。
+TCP, QUIC, WebRTC, Tor, relays, and WebSocket addresses are represented as
+multiaddrs. Implementations live in `io-libp2p-specs-transport`, `noise`, and
+`libp2p`.
 
-代数は `kotoba.protocol.transport`。hop は multiaddr + capability。
-`ipfs://` / `ipns://` / `https://` を hop の addr にすると `:not-a-multiaddr`。
-hop を CID / peer に `attach` しても identity は書き換わらない。
-`dial-live` はこの process では常に `:not-a-dht-node`。sockets は開かない。
-live は `:blocked-until :dht-node-transport`（ADR-2608145800）。
+`kotoba.protocol.transport` defines the pure hop algebra: a hop is a multiaddr
+plus protocol capabilities. Supplying `ipfs://`, `ipns://`, or `https://` as a
+hop address fails with `:not-a-multiaddr`. Attaching a hop to a CID or peer never
+rewrites that identity.
 
-HTTPS gateway（`https://ipfs.kotobase.net/ipfs/{cid}`、
-`{cid}.ipfs.itonami.cloud`）は transport + location の投影。
-canonical は `ipfs://{cid}` のまま（ADR-2608145100 / 2608140500）。
+This repository intentionally opens no sockets. `dial-live` returns a named
+blocked result because this process is not a DHT node. Live maturity remains
+blocked on `:dht-node-transport`; framing belongs to the transport repository,
+not here.
 
-URL を object graph に落とすとき、HTTP URL はここに落ちる。
-「同じ CID」の証拠にはならない。
+An HTTPS gateway such as `https://ipfs.kotobase.net/ipfs/{cid}` is a transport
+and location projection. The canonical identity remains `ipfs://{cid}`. An
+HTTP URL in an object graph therefore describes where bytes may be retrieved;
+it is not proof of the bytes' CID.
