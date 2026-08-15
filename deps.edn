@@ -1,6 +1,7 @@
-{;; kotoba-protocol — 層/語彙/app モデルの正本 (spec-first, pure cljc,
- ;; zero runtime deps)。実装は既存 repo 群 (io-ipld/datom/kotobase/kototama…)
- ;; に住み、この repo は宣言と検証だけを持つ。ADR-2607071500。
+{;; kotoba-protocol — normative layer, vocabulary, and app model
+ ;; (spec-first, pure cljc, zero runtime dependencies). Implementations live
+ ;; in focused sibling repos; this repository owns declarations and validation.
+ ;; ADR-2607071500.
  :paths ["src"]
  :deps {}
  :aliases

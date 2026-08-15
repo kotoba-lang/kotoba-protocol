@@ -1,24 +1,29 @@
-# who may write
+# Who may write
 
-host 名では書けない。鍵で書く。
+A hostname cannot authorize a write. Keys authorize writes.
 
-- 主体: `did:key`
-- 名: 鍵由来 IPNS
-- 委任: CACAO。depth-1 自己 mint が自 graph の既定
-- 検閲: Governor。拒否した書込を actor は実行しない
+- principal: `did:key`
+- mutable name: key-derived IPNS
+- delegation: CACAO; a depth-1 self-mint is the default for an actor's own graph
+- admission: a governor rejects an intent before the actor reaches the log
 
-CreateLink 相当の overlay は、ここに通してから datom log / DHT metadata へ。
-block を書き換える許可ではないので、対象 Entry の CID は動かない。
+CreateLink-shaped overlay writes pass through this boundary before reaching a
+datom log or DHT metadata. Authorization to add an overlay does not authorize a
+block rewrite, so the target entry CID remains unchanged.
 
-inga は「自分の chain 以外に書けない」を採る。conductor は採らない。
-無順序の書き込み面も採らない — Datalog join が ref 1 本だから。
+The model follows Inga's "an actor writes only its own chain" rule. It does not
+adopt a Holochain conductor or unordered write surface; an ordered log gives a
+Datalog join one current reference.
 
-live HTTP は無い。代数の継ぎ目は `kotoba.protocol.govern/write-overlay`。
-既定の `decide` は署名を検証しない（crypto は cacao）。形だけで fail closed:
+There is no live HTTP endpoint here. The executable seam is
+`kotoba.protocol.govern/write-overlay`. Its default `decide` function does not
+verify signatures—cryptography belongs to `cacao`/`kotoba-auth`—but the shape
+still fails closed:
 
-- 自 graph・depth-1 自己 mint（cacao 省略可）→ allow
-- 他人の chain → deny `:foreign-chain`
-- host 文字列 → deny `:not-a-key`
-- `governor-fn` が nil → deny（allow にしない）
+- own graph with no CACAO: allow as a depth-1 self-mint
+- own graph with a depth other than 1: deny
+- another actor's graph: deny with `:foreign-chain`
+- hostname-shaped author: deny with `:not-a-key`
+- missing governor function: deny rather than defaulting to allow
 
-拒否した書込は action log に届かない。親 CID も動かない。
+A denied intent never reaches the action log and cannot advance its parent CID.

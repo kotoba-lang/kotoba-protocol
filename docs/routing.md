@@ -1,24 +1,26 @@
-# routing
+# Routing
 
-**この CID / 名へ近づく。** packet routing ではない。
+Routing answers **which peer should be contacted next for this key, name, or
+peer?** It is content routing, not packet routing.
 
-content routing: key から holder へ反復接近する。実装の正は
-`io-libp2p-specs-kad-dht`（`/ipfs/kad/1.0.0` + delegated HTTP routing）。
-このプロセスが DHT node であることと、signed record を quorum で読むことは
-別（kad-dht README が切っている）。
+The implementation authority is `io-libp2p-specs-kad-dht`, including
+`/ipfs/kad/1.0.0` and delegated HTTP routing. Being a DHT node and reading a
+signed record through quorum are separate responsibilities.
 
-| | routing | discovery |
+| | Routing | Discovery |
 |---|---|---|
-| 問 | 次に誰を訊くか | 誰が持っていると索引されているか |
-| 例 | kad lookup | IPNI, provider record |
+| Question | Who should be queried next? | Who is indexed as serving the CID? |
+| Example | Kad peer lookup | IPNI/provider record |
 
-`GET /routing/v1/ipns/{k51}` は naming の解決を routing 面が代行しているだけ。
-返る値の identity は CID のまま。
+`GET /routing/v1/ipns/{k51}` performs naming resolution through a routing
+surface; the returned object's identity is still its CID.
 
-`GET /routing/v1/peers/{peer-id}` は peer の到達先（addrs / protocols）。
-discovery の `GET /providers/{cid}` とは問が違う。live の継ぎ目は
-`kotoba.protocol.route/lookup-live`（finder は
-`kad.routing/find-peers`）。finder が別 peer id を返すと `:peer-mismatch`。
+`GET /routing/v1/peers/{peer-id}` returns reachable addresses and protocols for
+a peer. It is different from discovery's `GET /providers/{cid}`. The injected
+live seam is `kotoba.protocol.route/lookup-live`, normally backed by
+`kad.routing/find-peers`. If an adapter returns a different peer ID, the result
+fails closed with `:peer-mismatch`.
 
-provide の署名を kad が持つことはしない。IPIP-0526 は historic で、
-署名対象 bytes は未決。捏造しない。
+This protocol does not claim that Kad signs provider advertisements. IPIP-0526
+is historical and did not settle canonical signing bytes, so the contract does
+not invent them.

@@ -1,41 +1,44 @@
-# discovery
+# Discovery
 
-**index。identity でも naming でもない。**
+Discovery is an **index**, not identity and not naming. It records who claims to
+serve a CID without changing the hash of the bytes.
 
-「この CID を誰が serve するか」を別データとして持つ。bytes の hash を
-変えない。
+## IPNI and delegated providers
 
-## IPNI
+[IPNI](https://github.com/ipni/go-libipni) belongs to this plane: it indexes CID
+to provider advertisements. IPNI never appears in the public resource URI; the
+identity remains `ipfs://{cid}` while a finder returns candidate providers.
 
-[IPNI](https://github.com/ipni/go-libipni)（InterPlanetary Network Indexer）は
-この面。CID → provider の広告索引。公開 URI に IPNI を入れない。
-`ipfs://{cid}` のまま、finder が provider を返す。
+The current live adapter is delegated routing in
+`io-libp2p-specs-kad-dht`:
 
-IPNI 専用 repo は作らない。いま live な adapter は
-`io-libp2p-specs-kad-dht` の delegated routing
-（`kad.routing/find-providers` → `GET /routing/v1/providers/{cid}`）。
-それは Kad の `GET_PROVIDERS` に近い HTTP 窓口であって、この process が
-DHT node になることではない。IPNI を足すなら同じ discovery adapter を
-差し替えるだけ。identity の再設計ではない。
+```text
+kad.routing/find-providers → GET /routing/v1/providers/{cid}
+```
 
-レコード代数は `kotoba.protocol.discover`（`advertise` / `lookup`）。
-live の継ぎ目は `lookup-live`（finder は注入）と `advertise-live`（putter は注入）。
-protocol は kad に依存しない。provider を足しても CID は同じ。
+That HTTP surface is analogous to Kad `GET_PROVIDERS`; it does not make this
+process a DHT node. A future IPNI adapter can replace the finder without
+redesigning identity.
 
-**読みは spec、書きは historic。** `GET /routing/v1/providers/{cid}` は
-Delegated Routing V1 にある。`PUT /routing/v1/providers` は spec に無い
-（IPNI / index-provider の bitswap envelope。CID は URL ではなく
-`Payload.Keys`。IPIP-378 の POST は着地せず閉じた）。署名も時計も kad は
-持たない。router が署名を要求して 400 を返すのは失敗であって、黙った成功ではない。
+`kotoba.protocol.discover` owns the pure `advertise`/`lookup` algebra and the
+injected `lookup-live`/`advertise-live` seams. It deliberately has no Kad
+dependency. Provider changes never change the CID.
 
-## 他の index
+Reading is standardized; HTTP writing is historical. Delegated Routing V1
+defines `GET /routing/v1/providers/{cid}`, but not
+`PUT /routing/v1/providers`. Historic IPNI/index-provider writes use a Bitswap
+envelope whose `Payload.Keys` contain CIDs. IPIP-378's POST proposal did not
+land. A router returning 400 because signing is required is a failure, not a
+silent success.
 
-| 系 | 何を索引するか |
+## Other indexes
+
+| System | Indexed relationship |
 |---|---|
-| Bitswap wantlist / provider record | CID → peer |
-| gossip of Holochain warrants | 違反証拠。ADR-2608038000 の既知 gap |
-| DHT entry for CreateLink | overlay edge。親 EntryHash は変わらない |
+| Bitswap wantlist/provider record | CID to peer |
+| Holochain warrant gossip | violation evidence; a known ADR-2608038000 gap |
+| DHT CreateLink entry | overlay edge; parent EntryHash remains unchanged |
 
-discovery の沈黙を「無い」と読まない（測れなかった検査は緑ではない）。
-`lookup-live` が `[]` なのは「訊いて、誰も持っていない」。`:ok? false` は
-「訊けなかった」。
+Silence must not be interpreted as absence. `lookup-live` returning `[]` means
+the query succeeded and no provider was found. `:ok? false` means the query
+could not be completed.

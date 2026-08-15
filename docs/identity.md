@@ -1,26 +1,30 @@
-# identity
+# Identity
 
-**何が同じ対象か。** 公開形は `ipfs://{cidv1}`（ADR-2608145100）。
+Identity answers one question: **what makes two references the same object?**
+The canonical public form is `ipfs://{cidv1-base32}` (ADR-2608145100).
 
-## output-addressed（既定）
+## Output-addressed identity
 
-CID = hash(bytes)。git blob、IPFS block、Holochain `EntryHash`、unison term、
-nix NAR。bytes が先、名前は後。
+`CID = hash(bytes)`. Git blobs, IPFS blocks, Holochain `EntryHash` values,
+Unison terms, and Nix NARs are output-addressed: bytes come first and names come
+later.
 
-## input-addressed（recipe）
+## Input-addressed identity
 
-hash(inputs / call / derivation)。nix `.drv`、RPC の「この関数にこの引数」、
-package lock の closure。**どっちか一方を選ばない。** recipe 自体も bytes なので
-CID を持つ。違うのは「何の hash か」であって、公開 URI の文法ではない。
+An input address hashes a recipe, call, derivation, or closed input set. Nix
+`.drv` files, RPC call objects, and package-lock closures use this form. The
+protocol does not choose input addressing *instead of* output addressing: the
+recipe is itself bytes and therefore also has an output CID. The distinction is
+what the hash identifies, not a different public URI grammar.
 
-| 対象 | アドレスの種類 |
+| Object | Address kind |
 |---|---|
-| 配布する HTML / wasm / datom snapshot | output |
-| ビルド式、RPC call object | input（その object の CID は output） |
-| Holochain `ActionHash` | 署名済み action bytes の output |
-| Holochain `DnaHash` | DNA 定義 bytes の output。名前ではない |
+| distributed HTML, Wasm, or datom snapshot | output |
+| build expression or RPC call object | input; the recipe object also has an output CID |
+| Holochain `ActionHash` | output of signed action bytes |
+| Holochain `DnaHash` | output of DNA-definition bytes, not a name |
 
-CIDv0 (`Qm…`) は歴史的 L0 形。公開ラベルにしない。
-HTTPS は identity ではない（transport / location）。
-
-代数は `kotoba.protocol.address`（`output` / `input` / `holochain-kind`）。
+CIDv0 (`Qm…`) remains a historical L0 shape but is rejected as a public label.
+HTTPS is transport/location, not identity. The executable algebra is
+`kotoba.protocol.address` (`output`, `input`, `recipe-as-output`, and
+`holochain-kind`).

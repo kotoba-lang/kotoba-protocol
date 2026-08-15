@@ -1,17 +1,27 @@
-# kotoba-protocol
+# Kotoba Protocol
 
-主権データ基盤 **kotoba** の層と責務の正本（spec-first / pure `.cljc` /
-zero runtime deps）。ADR-2607071500 / ADR-2608145100 / ADR-2608145200。
+The normative ownership map and executable algebra for Kotoba's sovereign,
+content-addressed application and data stack. It is spec-first, portable
+`.cljc`, and has zero runtime dependencies.
 
-実装は既存 repo 群に住む。この repo が持つのは**宣言（data）と検証（テスト）**
-だけで、drift はテストで露見させる。
+This repository owns declarations, pure validation, and tests. Implementations
+live in focused sibling repositories. It does **not** open sockets, run a DHT,
+persist a database, hash graph commits, or verify CACAO signatures. Those
+boundaries are deliberate: drift between the declared model and its consumers
+must become visible in tests rather than creating a second implementation here.
 
-## 5 段（hash-addressed object network）
+Architecture decisions: ADR-2607071500, ADR-2608145100, ADR-2608145200, and
+ADR-2608145800 in the [`com-junkawasaki/root`](https://github.com/com-junkawasaki/root)
+superproject.
 
-```
+## Start here
+
+The five-stage hash-addressed object network is a path through the larger model:
+
+```text
 identity        content hash / CID          docs/identity.md
     ↓
-structure       DAG / 2 種の link           docs/content-protocol.md
+structure       DAG / two link kinds        docs/content-protocol.md
     ↓
 mutable name    ref / IPNS / branch         docs/naming.md
     ↓
@@ -20,72 +30,109 @@ discovery       DHT / IPNI / gossip         docs/discovery.md
 transport       TCP / QUIC / WebRTC / Tor   docs/transport.md
 ```
 
-path はどの段でも identity にしない。
+A path is never identity at any stage. The canonical public resource forms are
+`ipfs://{cidv1-base32}` for immutable identity and `ipns://{k51}` for a mutable,
+key-derived name. HTTPS is a retrieval location, not proof that two resources
+are identical.
 
-## 8 面（URL / DNS / HTTP / Git / pkg / RPC の落とし先）
+## Eight orthogonal planes
 
-L0–L5 と直交する。1 つの Merkle DAG に全部畳まない。
+The communication planes are orthogonal to the L0-L5 data ladder. URL, DNS,
+HTTP, Git, package-manager, and RPC concerns must not be collapsed into one
+Merkle DAG.
 
-| 面 | README | 既存系の例 |
+| Plane | Contract | Algebra | Live seam |
+|---|---|---:|---:|
+| identity | [Identity](docs/identity.md) | ready | n/a |
+| naming | [Naming](docs/naming.md) | ready | ready |
+| routing | [Routing](docs/routing.md) | ready | ready |
+| discovery | [Discovery](docs/discovery.md) | ready | ready |
+| transport | [Transport](docs/transport.md) | ready | blocked on a DHT-node transport |
+| session | [Mux and head](docs/mux-and-head.md) | ready | blocked on transport |
+| authorization | [Who may write](docs/who-may-write.md) | ready | n/a |
+| content protocol | [Content protocol](docs/content-protocol.md) | ready | n/a |
+
+`ready` for a live seam means the pure protocol accepts an injected adapter; it
+does not mean this process has become a network node. The machine-readable
+authority is `kotoba.protocol.layers/planes`, `link-kinds`, and
+`plane-maturity`.
+
+## L0-L5 data ladder
+
+| Layer | Responsibility | Implementation owners |
 |---|---|---|
-| identity | [docs/identity.md](docs/identity.md) | git blob, CID, EntryHash, drv/NAR |
-| naming | [docs/naming.md](docs/naming.md) | git ref, IPNS, DNS, package tag |
-| routing | [docs/routing.md](docs/routing.md) | kad lookup |
-| discovery | [docs/discovery.md](docs/discovery.md) | IPNI, providers |
-| transport | [docs/transport.md](docs/transport.md) | TCP/QUIC, HTTPS gateway |
-| session | [docs/mux-and-head.md](docs/mux-and-head.md) | Noise/Yamux, source-chain head |
-| authorization | [docs/who-may-write.md](docs/who-may-write.md) | CACAO, governor |
-| content protocol | [docs/content-protocol.md](docs/content-protocol.md) | IPLD merkle **and** datom/CreateLink |
+| L0 address | bytes to CID | `io-multiformats`, `io-ipld`, `dag-cbor` |
+| L1 fact | append-only datoms, including overlay edges | `datom` |
+| L2 graph | ordered action log and committed graph CID | `chain`, `kotobase-peer`, `prolly-tree`, `mst`, `arrangement` |
+| L3 authority | `did:key`, key-derived IPNS, CACAO write authority | `cacao`, `kotoba-auth`, `tech-ipfs-specs-ipns` |
+| L4 distribution | retrieval, pinning, B2 offload, provider discovery, IPNS publish/resolve | `kotobase`, `ipfs-pinner`, `io-libp2p-specs-kad-dht` |
+| L5 application | actor execution, app manifests, appviews, embeds | `kototama`, `wasm-webcomponent`, this repository |
 
-正本は `kotoba.protocol.layers` の `planes` / `link-kinds`。
-動く代数は `kotoba.protocol.graph`（edge）・`address`（hash の *of-what*）・
-`surfaces`（既存系の投影）・`discover`（IPNI）・`route`（peer lookup）・
-`naming`（IPNS resolve/publish）・`govern`（誰が overlay を書いてよいか）・
-`transport`（hop は identity ではない。sockets は開かない）・
-`mux`（生存中の stream と chain の先端は別座標）。
-残りの成熟度は `layers/plane-maturity`。
+The L2 graph CID is supplied by an injected `chain.core/commit!`-shaped
+function. `kotoba-protocol` does not hash it. An archive `Location` may be the
+raw CID of the same bytes, while the graph identity CID may use another codec;
+codec choice does not turn a location into identity.
 
-## Holochain との切り方
+## Two link kinds
 
-相性が良いのは **overlay**（CreateLink = 後から足せる signed edge、親 CID 不変）。
-置き換えないのは **merkle**（配布物の closure を 1 CID で検証する）。
-ランタイムとしての conductor と無順序 DHT は採らない（ADR-2608038000）。
-datom が CreateLink 相当。IPLD link が git tree 相当。
+The model preserves both forms instead of pretending they are interchangeable:
 
-## L0–L5（データ梯子）
+| Kind | Stored in | Parent CID | Analogues |
+|---|---|---|---|
+| `:merkle` | block content | changes | IPLD link, Git tree, Nix closure |
+| `:action` | signed metadata | unchanged | Holochain CreateLink, datom assertion, IPNS pointer |
 
-| 層 | 責務 | 実装 |
-|---|---|---|
-| L0 address | bytes → CID | io-multiformats, io-ipld, dag-cbor |
-| L1 fact | datom（overlay edge もここ） | datom |
-| L2 graph | action log の CID は `chain.core/commit!`（protocol は hash しない）。Location は raw でありうる | chain, kotoba.protocol.graph |
-| L3 authority | did:key、鍵由来 IPNS、CACAO | cacao, kotoba-auth, tech-ipfs-specs-ipns |
-| L4 distribution | 配布 + discovery | kotobase.net, ipfs-pinner, kad-dht |
-| L5 application | actor 実行と app manifest | kototama, this repo |
+Adding a Merkle child produces a new parent object and therefore a new parent
+CID. Adding an action/overlay edge advances the ordered action log while the
+referenced object remains unchanged. `kotoba.protocol.graph` makes this
+distinction executable and rejects a different body or link set under the same
+CID with `:cid-mismatch`.
 
-## Namespaces
+## Executable surface
 
-- `kotoba.protocol.layers` — `layers` / `planes` / `link-kinds` / `owner-of` / `owner-plane`
-- `kotoba.protocol.ref` — `ipfs://{cidv1}` \| `ipns://{k51}`。path は identity ではない
-- `kotoba.protocol.graph` — 2 種の link の参照代数。`commit-log` が L2 graph CID（hasher は `chain.core/commit!`）
-- `kotoba.protocol.address` — output vs input。Holochain の Entry/Action/Dna/Agent は *of-what*
-- `kotoba.protocol.surfaces` — URL / DNS / HTTP / Git / pkg / RPC を 8 面へ投影。1 DAG に畳まない
-- `kotoba.protocol.discover` — IPNI / provider record。CID を書き換えない。live は `lookup-live` / `advertise-live`
-- `kotoba.protocol.route` — peer-id → addrs。peer id を書き換えない。live は `lookup-live`
-- `kotoba.protocol.naming` — k51 → いまの CID。name を書き換えない。live は `lookup-live` / `publish-live`
-- `kotoba.protocol.govern` — overlay 書込の governor。拒否は log に届かない
-- `kotoba.protocol.transport` — hop = multiaddr。identity を書き換えない。`dial-live` は拒否
-- `kotoba.protocol.mux` — stream と head は別座標。`open-live` は拒否。docs は `mux-and-head.md`
-- `kotoba.protocol.vocab` — `:kotoba.actor/*` `:kotoba.graph/*` `:kotoba.app/*` `:kotoba.link/*`
-- `kotoba.protocol.app` — L5 manifest / embed-url / caps
-- `kotoba.protocol.cid` — CIDv1 digest。UnixFS walk はしない
+- `kotoba.protocol.layers` — layers, planes, link kinds, ownership, maturity
+- `kotoba.protocol.ref` — strict `ipfs://` and `ipns://` public references
+- `kotoba.protocol.cid` — CIDv1/sha2-256 parsing and digest comparison; no hashing
+- `kotoba.protocol.address` — output- versus input-addressed identity
+- `kotoba.protocol.graph` — Merkle nodes, overlay actions, walks, log commits
+- `kotoba.protocol.surfaces` — URL/DNS/HTTP/Git/package/RPC plane projections
+- `kotoba.protocol.discover` — provider-record algebra and injected discovery
+- `kotoba.protocol.route` — peer lookup without rewriting the requested peer ID
+- `kotoba.protocol.naming` — IPNS lookup/publish without rewriting the name
+- `kotoba.protocol.govern` — fail-closed overlay-write admission
+- `kotoba.protocol.transport` — multiaddr hops; deliberately no socket dialer
+- `kotoba.protocol.mux` — authenticated stream and causal head as separate coordinates
+- `kotoba.protocol.vocab` — `:kotoba.actor/*`, `:kotoba.graph/*`, `:kotoba.app/*`, and `:kotoba.link/*`
+- `kotoba.protocol.app` — signed, history-bearing L5 app manifests and capability requests
+- `kotoba.protocol.bridge` — host-mediated capability messages for embedded apps
 
-## atproto
+The naming, routing, and discovery live functions normalize injected adapter
+results and fail closed on identity mismatches. Transport and session live
+operations return named blocked states; they do not fake network maturity.
 
-[`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol) は投影層。
+## Repository boundaries
 
-## Dev
+- [`kotoba-lang/kotoba-lang`](https://github.com/kotoba-lang/kotoba-lang) owns the language specification, grammar, public CLI contract, and conformance.
+- [`kotoba-lang/kotoba`](https://github.com/kotoba-lang/kotoba) owns the installable CLI, runtime/host implementations, providers, and integration qualification.
+- [`kotoba-lang/kotobase`](https://github.com/kotoba-lang/kotobase) owns the persistent Datalog and content-addressed database.
+- [`kotoba-lang/kototama`](https://github.com/kotoba-lang/kototama) owns component admission and capability binding at execution.
+- [`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol) is an AT Protocol projection over this model, not this repository's core.
+- `io-libp2p-specs-kad-dht`, `io-libp2p-specs-transport`, `noise`, `cacao`, and `tech-ipfs-specs-ipns` own their focused network or cryptographic implementations.
+
+## Development
 
 ```bash
 clojure -M:test
+clojure -M:lint
 ```
+
+The test suite is the executable drift detector for the declared boundaries.
+New behavior should strengthen a named plane or layer without importing a
+network runtime into this repository.
+
+## 日本語概要
+
+`kotoba-protocol` は、Kotoba の content-addressed application/data stack における
+層・通信面・責務分離の正本です。このrepoはpure `.cljc` の宣言・代数・検証のみを
+持ち、DHT node、socket、永続DB、暗号鍵管理を実装しません。日本語から参照する場合も、
+上の英語本文と `kotoba.protocol.layers` のmachine-readable dataを正とします。
