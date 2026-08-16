@@ -1,6 +1,6 @@
 (ns kotoba.protocol.discover
   "Discovery plane: CID → who serves it (ADR-2608145200 / ADR-2608145500 /
-  ADR-2608145600).
+  ADR-2608145600 / ADR-2608160300).
 
   IPNI / Bitswap provider records / kad GET_PROVIDERS live here.
   A record does not change the CID. Putting a provider is not a merkle
@@ -8,10 +8,11 @@
 
   `advertise` / `lookup` are the in-memory algebra.
   `lookup-live` binds `(fn [cid] (kad.routing/find-providers http-fn cid opts))`.
-  `advertise-live` binds `(fn [rec] (kad.routing/provide http-fn rec opts))`.
-  Provide over HTTP is the historic IPNI PUT, not a routing-v1 write.
-  This ns does not require kad. Do not put IPNI into the public URI.
-  Do not create an IPNI repo to hold this adapter."
+  `advertise-live` production putter is
+  `(fn [rec] (ipni.advertise http-fn rec opts))` (io-ipni-specs).
+  `kad.routing/provide` remains the historic Bitswap PUT; it is not
+  kotobase's production write. This ns requires neither kad nor ipni.
+  Do not put IPNI into the public URI."
   (:require [kotoba.protocol.vocab :as vocab]))
 
 (defn index
@@ -105,11 +106,16 @@
   `putter-fn` is `(fn [rec] -> {:ok? :cid :accepted …})`. Production:
 
       (fn [rec]
+        (ipni.advertise http-fn rec opts))
+
+  Historic Bitswap PUT remains:
+
+      (fn [rec]
         (kad.routing/provide http-fn rec opts))
 
   A putter that returns a different `:cid` is `:cid-mismatch`.
-  `:ok? false` is \"no router accepted\" — not a silent pass.
-  This ns does not depend on kad."
+  `:ok? false` is \"no indexer/router accepted\" — not a silent pass.
+  This ns depends on neither kad nor ipni."
   [rec putter-fn]
   (cond
     (:error rec) rec

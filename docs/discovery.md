@@ -9,7 +9,7 @@ serve a CID without changing the hash of the bytes.
 to provider advertisements. IPNI never appears in the public resource URI; the
 identity remains `ipfs://{cid}` while a finder returns candidate providers.
 
-The current live adapter is delegated routing in
+The current live **lookup** adapter is delegated routing in
 `io-libp2p-specs-kad-dht`:
 
 ```text
@@ -17,19 +17,29 @@ kad.routing/find-providers → GET /routing/v1/providers/{cid}
 ```
 
 That HTTP surface is analogous to Kad `GET_PROVIDERS`; it does not make this
-process a DHT node. A future IPNI adapter can replace the finder without
-redesigning identity.
+process a DHT node. `kad.routing` default-routers may include
+`https://cid.contact/routing/v1` so the same finder sees IPNI-backed
+answers without this ns requiring ipni.
+
+The origin-plane library is `kotoba-lang/io-ipni-specs` (ADR-2608160300).
+Production **advertise** is an advertisement chain + HTTP announce, not
+the historic Bitswap `PUT /providers`:
+
+```text
+ipni.advertise → PUT {indexer}/ingest/announce
+```
 
 `kotoba.protocol.discover` owns the pure `advertise`/`lookup` algebra and the
-injected `lookup-live`/`advertise-live` seams. It deliberately has no Kad
+injected `lookup-live`/`advertise-live` seams. It has no Kad and no IPNI
 dependency. Provider changes never change the CID.
 
-Reading is standardized; HTTP writing is historical. Delegated Routing V1
-defines `GET /routing/v1/providers/{cid}`, but not
+Reading is standardized; HTTP writing of Bitswap envelopes is historical.
+Delegated Routing V1 defines `GET /routing/v1/providers/{cid}`, but not
 `PUT /routing/v1/providers`. Historic IPNI/index-provider writes use a Bitswap
 envelope whose `Payload.Keys` contain CIDs. IPIP-378's POST proposal did not
 land. A router returning 400 because signing is required is a failure, not a
-silent success.
+silent success. Kotobase does not speak Bitswap; its write path is
+`io-ipni-specs`.
 
 ## Other indexes
 
