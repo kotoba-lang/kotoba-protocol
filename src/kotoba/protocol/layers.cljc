@@ -87,8 +87,8 @@
 
    {:plane :content-protocol
     :readme "docs/content-protocol.md"
-    :responsibility "object の形と 2 種の link。merkle (親 CID が変わる) と action/overlay (親 CID は変わらない)。datom / IPLD / app manifest"
-    :impl-repos ["io-ipld" "datom" "kotoba-protocol (app)"]}])
+    :responsibility "object の形と 2 種の link。merkle (親 CID が変わる) と action/overlay (親 CID は変わらない)。datom / IPLD / app manifest。client-held 封緘 (envelope / org-signal) も object の形であって 9 つ目の通信面ではない"
+    :impl-repos ["io-ipld" "datom" "envelope" "org-signal" "kotoba-protocol (app/graph/sealed)"]}])
 
 (def link-kinds
   "structure 面の 2 種。IPLD と Holochain を混ぜないための切る方。
@@ -148,7 +148,12 @@
    :action-hash :l0-address
    :dna-hash :l0-address
    :agent-pub-key :l3-authority
-   :unixfs-path :l0-address})
+   :unixfs-path :l0-address
+   :sealed-object :l0-address
+   :e2ee-session :l0-address
+   :prekey-bundle :l3-authority
+   :sealed-mailbox :l2-graph
+   :hop-encryption :l4-distribution})
 
 (def plane-of
   "関心事 → 属する通信面。owner-plane で引く。"
@@ -190,7 +195,12 @@
    :action-hash :identity
    :dna-hash :identity
    :agent-pub-key :authorization
-   :unixfs-path :identity})
+   :unixfs-path :identity
+   :sealed-object :content-protocol
+   :e2ee-session :content-protocol
+   :prekey-bundle :naming
+   :sealed-mailbox :content-protocol
+   :hop-encryption :transport})
 
 (defn layer
   "層 keyword → 層エントリ | nil。"

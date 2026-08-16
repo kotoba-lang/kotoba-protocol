@@ -95,6 +95,7 @@ CID with `:cid-mismatch`.
 - `kotoba.protocol.cid` — CIDv1/sha2-256 parsing and digest comparison; no hashing
 - `kotoba.protocol.address` — output- versus input-addressed identity
 - `kotoba.protocol.graph` — Merkle nodes, overlay actions, walks, log commits
+- `kotoba.protocol.sealed` — client-held confidentiality composition (envelope + org-signal + IPNS mailbox); no crypto runtime
 - `kotoba.protocol.surfaces` — URL/DNS/HTTP/Git/package/RPC plane projections
 - `kotoba.protocol.discover` — provider-record algebra and injected discovery
 - `kotoba.protocol.route` — peer lookup without rewriting the requested peer ID
@@ -118,6 +119,7 @@ operations return named blocked states; they do not fake network maturity.
 - [`kotoba-lang/kototama`](https://github.com/kotoba-lang/kototama) owns component admission and capability binding at execution.
 - [`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol) is an AT Protocol projection over this model, not this repository's core.
 - `io-libp2p-specs-kad-dht`, `io-libp2p-specs-transport`, `noise`, `cacao`, and `tech-ipfs-specs-ipns` own their focused network or cryptographic implementations.
+- [`kotoba-lang/envelope`](https://github.com/kotoba-lang/envelope) owns object-at-rest encryption (Storj-Uplink analog). [`kotoba-lang/org-signal`](https://github.com/kotoba-lang/org-signal) owns X3DH + Double Ratchet. IPFS/IPLD/IPNS core specs do not.
 
 ## Development
 
