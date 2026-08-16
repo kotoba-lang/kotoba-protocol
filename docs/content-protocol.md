@@ -54,3 +54,27 @@ raw CID of the same bytes; location codec and graph identity remain distinct.
 L1 datoms are the fact surface of the content protocol. L5 app manifests are an
 application built on those facts. Full projection data lives in
 `kotoba.protocol.surfaces`.
+
+## Client-held confidentiality
+
+IPFS, IPLD, and IPNS do not specify Storj-Uplink-shaped client encryption.
+Confidentiality is therefore a content-protocol object shape, not a ninth
+communication plane (ADR-2608070400, ADR-2608161600).
+`kotoba.protocol.sealed` is the composition algebra; this repository still
+does not wrap keys or ratchet.
+
+| Construction | Implementation | Protects | Forward secrecy |
+|---|---|---|---|
+| `:object` | `envelope` | bytes at rest; one content key, many wraps | no |
+| `:session` | `org-signal` | sender to recipient (X3DH + Double Ratchet) | yes |
+| `:hop` | `noise` | adjacent libp2p peers | hop only |
+| `:ipns` | `tech-ipfs-specs-ipns` | authenticity of a pointer, not secrecy | n/a |
+| `:dag-jose` | draft IPLD container | JWE/JWS bytes | no; not a ratchet |
+
+A Signal ciphertext may be stored under an object CID. That is composition.
+Using envelope as the per-message construction, or treating Noise as E2EE,
+is `:construction-mismatch`. IPNS publishes a prekey-bundle CID and a
+mailbox head CID; it does not encrypt them. One-time prekey consumption
+cannot be guaranteed by a content-addressed store alone. Convergent
+encryption is forbidden: identical plaintext must not produce identical
+ciphertext CIDs.

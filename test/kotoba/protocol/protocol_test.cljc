@@ -12,6 +12,7 @@
             [kotoba.protocol.naming :as naming]
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.route :as route]
+            [kotoba.protocol.sealed :as sealed]
             [kotoba.protocol.surfaces :as surfaces]
             [kotoba.protocol.transport :as transport]
             [kotoba.protocol.vocab :as vocab]))
@@ -103,7 +104,13 @@
   (is (= :discovery (:plane (layers/owner-plane :ipni)))
       "IPNI は CID を書き換えない索引")
   (is (= :identity (:plane (layers/owner-plane :input-address)))
-      "input-addressed recipe も identity 面。naming ではない"))
+      "input-addressed recipe も identity 面。naming ではない")
+  (is (= :content-protocol (:plane (layers/owner-plane :e2ee-session)))
+      "Signal E2EE is an object shape, not the session/mux plane")
+  (is (= :transport (:plane (layers/owner-plane :hop-encryption)))
+      "Noise is hop encryption")
+  (is (= :naming (:plane (layers/owner-plane :prekey-bundle)))
+      "a prekey bundle is discovered by IPNS, not encrypted by it"))
 
 ;; ── vocab ────────────────────────────────────────────────────────────────────
 
@@ -854,6 +861,97 @@
     (is (= :not-a-dht-node (:error out)))
     (is (= :transport (:blocked-until out)))
     (is (= s (:session out)))))
+
+;; ── sealed: client-held confidentiality composition (ADR-2608161600) ─────────
+
+(deftest ipfs-core-has-no-storj-shaped-client-encryption
+  (is (false? (sealed/spec-in-ipfs? :object))
+      "envelope is ours; IPFS does not encrypt stored bytes")
+  (is (false? (sealed/spec-in-ipfs? :session))
+      "Signal is not an IPLD spec")
+  (is (true? (sealed/spec-in-ipfs? :ipns))
+      "IPNS is in the IPFS specs, and it is not confidentiality")
+  (is (= :draft-container-only
+         (:spec-in-ipfs? (sealed/protection :dag-jose))))
+  (is (false? (sealed/hop-is-e2ee?)))
+  (is (false? (sealed/dag-jose-is-ratchet?)))
+  (is (false? (sealed/convergent-allowed?)))
+  (is (false? (sealed/opk-once-on-content-addressed?)))
+  (is (true? (sealed/e2ee-is-not-session-plane?)))
+  (is (true? (get-in sealed/constructions [:object :confidential?])))
+  (is (false? (get-in sealed/constructions [:object :forward-secret?])))
+  (is (true? (get-in sealed/constructions [:session :forward-secret?])))
+  (is (false? (get-in sealed/constructions [:ipns :confidential?])))
+  (is (= :adjacent-peer (get-in sealed/constructions [:hop :scope]))))
+
+(deftest sealed-key-roles-must-not-collide
+  (is (:ok? (sealed/key-roles {:ipns "k-ipns" :peer "k-peer" :signal "k-signal"})))
+  (is (= :key-role-collision
+         (:error (sealed/key-roles {:ipns "same" :peer "same" :signal "other"}))))
+  (is (= #{:ipns :peer}
+         (:collided (sealed/key-roles {:ipns "same" :peer "same" :signal "other"}))))
+  (is (= :key-role-collision
+         (:error (sealed/key-roles {:ipns "a" :peer "b" :signal "a"})))))
+
+(deftest sealed-prekey-bundle-is-public
+  (let [b (sealed/prekey-bundle {:identity-pub "ik"
+                                 :signed-prekey {:pub "spk"}
+                                 :signature "sig"})]
+    (is (true? (sealed/bundle? b)))
+    (is (false? (:confidential? b)))
+    (is (nil? (:pq-prekey b))
+        "missing PQ prekey is recorded by absence, not upgraded to hybrid"))
+  (is (= :missing-identity-pub
+         (:error (sealed/prekey-bundle {:signed-prekey {:pub "spk"} :signature "sig"})))))
+
+(deftest sealed-attachment-must-not-carry-plaintext
+  (is (= :plaintext-in-attachment
+         (:error (sealed/attachment {:cid raw-cid :wrapped-key "k" :plaintext "hi"}))))
+  (let [a (sealed/attachment {:cid raw-cid :wrapped-key "wk" :size 12 :digest "h"})]
+    (is (= raw-cid (:cid a)))
+    (is (not (contains? a :plaintext)))))
+
+(deftest sealed-message-is-session-construction
+  (is (= :construction-mismatch
+         (:error (sealed/message {:construction :object
+                                  :header {:n 0}
+                                  :ciphertext "ct"})))
+      "envelope is not a per-message ratchet")
+  (let [msg (sealed/message {:construction :session
+                             :header {:dh-pub "x" :n 0}
+                             :ciphertext "ct"
+                             :attachments [(sealed/attachment {:cid other-raw-cid
+                                                               :wrapped-key "wk"})]})]
+    (is (true? (sealed/message? msg)))
+    (is (= 1 (count (:attachments msg))))
+    (let [stored (sealed/store msg raw-cid)]
+      (is (= :object (:construction stored)))
+      (is (= :session-ciphertext (:body-is stored)))
+      (is (= raw-cid (:cid stored))))))
+
+(deftest sealed-mailbox-is-append-only-and-ipns-is-not-encryption
+  (let [mb0 (sealed/mailbox)
+        mb1 (sealed/append mb0 raw-cid)
+        mb2 (sealed/append mb1 other-raw-cid)]
+    (is (true? (sealed/entries-prefix? mb0 mb1)))
+    (is (true? (sealed/entries-prefix? mb1 mb2)))
+    (is (= [raw-cid other-raw-cid] (:entries mb2)))
+    (is (true? (:dirty? mb2)))
+    (let [sealed-mb (sealed/commit-head mb2 (constantly cid))]
+      (is (= cid (:head sealed-mb)))
+      (is (false? (:dirty? sealed-mb)))
+      (is (= :head-unchanged
+             (:error (sealed/commit-head (assoc mb2 :head cid)
+                                         (constantly cid))))
+          "a dirty mailbox that hashes to the previous head lied")
+      (let [pub (sealed/publish-head ipns (:head sealed-mb))]
+        (is (= :naming (:plane pub)))
+        (is (false? (:confidential? pub)))
+        (is (false? (:mutates-name? pub)))
+        (is (= ipns (:name pub)))
+        (is (= cid (:value pub))))))
+  (is (= :invalid-ipns-name
+         (:error (sealed/publish-head "not-a-name" cid)))))
 
 
 
