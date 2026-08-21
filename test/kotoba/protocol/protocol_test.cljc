@@ -508,12 +508,82 @@
 (deftest ipni-record-does-not-mutate-cid
   (let [rec (discover/record {:cid cid :peer "12D3KooWpeer"
                               :addrs ["/ip4/127.0.0.1/tcp/4001"]})
-        idx (discover/advertise (discover/index) rec)]
+        idx (discover/advertise (discover/index) rec identity)]
     (is (false? (:mutates-cid? rec)))
     (is (= :discovery (:plane rec)))
-    (is (= [rec] (discover/lookup idx cid)))
-    (is (= [] (discover/lookup idx raw-cid)))
+    (is (= [rec] (discover/lookup idx cid identity)))
+    (is (= [] (discover/lookup idx raw-cid identity)))
     (is (= :discovery (:plane (layers/owner-plane :ipni))))))
+
+;; ── discovery: what the index is keyed BY is a decision ──────────────────────
+;;
+;; The two CIDs below are the SAME BYTES under two codecs -- they differ in one
+;; character, the codec varint -- and therefore carry one multihash. IPNI keys
+;; providers by that multihash, so a CID-keyed index answers "no providers" for
+;; content it is holding providers for.
+;;
+;; The real extractor is `multiformats.core/cid->multihash`. It is not used
+;; here: this repository declares `:deps {}` and owns declarations, so the
+;; digest arrives injected, exactly as `http-fn`, `hash-fn` and `sign-fn` do.
+;; `digest-of` below is that injection, standing in for one decode.
+
+(def same-content-raw  "bafkreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u")
+(def same-content-cbor "bafyreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u")
+(def shared-multihash
+  "1220b0fb9b475e8c8cbf36bc73bf5726b68ba755ae093fee39c9678e9fdbd5678bed")
+
+(def digest-of
+  "cid -> content digest. What `multiformats.core/cid->multihash` returns,
+  as a value: a multihash comes back as a byte array, which hashes by
+  identity, so two equal digests would be two keys."
+  {same-content-raw  shared-multihash
+   same-content-cbor shared-multihash
+   cid               "1220-unrelated-a"
+   raw-cid           "1220-unrelated-b"})
+
+(deftest keying-by-cid-misses-the-same-content-under-another-codec
+  (testing "the gap, stated as a test before it is closed"
+    (let [rec (discover/record {:cid same-content-raw :peer "12D3KooWpeer" :addrs []})
+          idx (discover/advertise (discover/index) rec identity)]
+      (is (= [rec] (discover/lookup idx same-content-raw identity)))
+      (is (= [] (discover/lookup idx same-content-cbor identity))
+          "one content, one provider, and this answers nothing"))))
+
+(deftest keying-by-digest-finds-it
+  (let [rec (discover/record {:cid same-content-raw :peer "12D3KooWpeer" :addrs []})
+        idx (discover/advertise (discover/index) rec digest-of)]
+    (is (= [rec] (discover/lookup idx same-content-cbor digest-of))
+        "asked under the dag-cbor CID, answered from the raw advertisement")
+    (is (= same-content-raw (:cid (first (discover/lookup idx same-content-cbor digest-of))))
+        "the record still carries the CID it was advertised under -- the index
+         is a location answer, never an identity")
+    (is (= [] (discover/lookup idx cid digest-of))
+        "an unrelated CID still finds nothing")))
+
+(deftest a-key-fn-is-required-and-an-unkeyable-cid-is-refused
+  (let [rec (discover/record {:cid same-content-raw :peer "p" :addrs []})]
+    (is (= :key-fn-required (:error (discover/advertise (discover/index) rec nil))))
+    (is (= :key-fn-required (:error (discover/lookup {} same-content-raw nil))))
+    (is (= :unkeyable-cid
+           (:error (discover/advertise (discover/index) rec (constantly nil))))
+        "a digest that could not be read is not a key of nil")
+    (is (= :unkeyable-cid (:error (discover/lookup {} same-content-raw (constantly nil)))))))
+
+(deftest advertised-cids-means-the-same-under-either-keying
+  (testing "`cids` read the KEYS, which stop being CIDs the moment the keying
+            changes -- a caller comparing them to a CID would find nothing and
+            believe it"
+    (let [r1 (discover/record {:cid same-content-raw :peer "p1" :addrs []})
+          r2 (discover/record {:cid cid :peer "p2" :addrs []})
+          by-cid (-> (discover/index) (discover/advertise r1 identity)
+                     (discover/advertise r2 identity))
+          by-digest (-> (discover/index) (discover/advertise r1 digest-of)
+                        (discover/advertise r2 digest-of))]
+      (is (= #{same-content-raw cid} (discover/advertised-cids by-cid)))
+      (is (= #{same-content-raw cid} (discover/advertised-cids by-digest)))
+      (is (not= (discover/keys-with-providers by-cid)
+                (discover/keys-with-providers by-digest))
+          "the keys differ; the advertised CIDs do not"))))
 
 (deftest lookup-live-does-not-rewrite-cid
   (let [finder (fn [_]

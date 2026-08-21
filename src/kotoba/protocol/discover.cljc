@@ -32,17 +32,56 @@
      :mutates-cid? false}))
 
 (defn advertise
-  "Add a provider for `cid`. The CID key is unchanged."
-  [idx rec]
-  (if (:error rec)
-    rec
-    (update idx (:cid rec) (fnil conj []) rec)))
+  "Add a provider record to `idx` under `(key-fn (:cid rec))`.
+
+  `key-fn` is REQUIRED, and that is the point of this arity. Keying a provider
+  index is a decision, and this namespace used to make it silently by keying on
+  the CID string -- which disagrees with the network it describes. IPNI indexes
+  a MULTIHASH: the same bytes addressed as raw and as dag-cbor are two CIDs and
+  one location question, so a CID-keyed index answers `no providers` for
+  content it is holding providers for. Nothing here had ever tested that case;
+  the test that looked like it (`ipni-record-does-not-mutate-cid`) uses two
+  fixtures whose digests differ, so it asserts only that an unrelated CID finds
+  nothing.
+
+  Two keyings, stated rather than defaulted:
+
+      identity                        key by CID -- codec-sensitive
+      #(vec (mf/cid->multihash %))    key by content -- what IPNI does
+
+  `key-fn` must return a VALUE. A multihash comes back as a byte array, which
+  hashes by identity, so two equal digests would be two keys; `vec` is not
+  decoration.
+
+  The same `key-fn` must be used for `lookup`. Mixing them does not error, it
+  answers wrongly -- the same contract `datalog.index` states for `ref?`, and
+  for the same reason: there is no default that is safe to fall back on
+  silently.
+
+  Neither keying rewrites the record: `:cid` stays exactly as advertised, so a
+  digest-keyed lookup can still be filtered by codec afterwards. The index is a
+  location answer, never an identity."
+  [idx rec key-fn]
+  (cond
+    (:error rec) rec
+    (not (ifn? key-fn)) {:error :key-fn-required}
+    :else
+    (let [k (key-fn (:cid rec))]
+      (if (nil? k)
+        {:error :unkeyable-cid :value (:cid rec)}
+        (update idx k (fnil conj []) rec)))))
 
 (defn lookup
-  [idx cid]
-  (if (vocab/cid? cid)
-    (or (get idx cid) [])
-    {:error :invalid-cid :value cid}))
+  "Providers for `cid` under `key-fn`, which must be the one `advertise` used."
+  [idx cid key-fn]
+  (cond
+    (not (vocab/cid? cid)) {:error :invalid-cid :value cid}
+    (not (ifn? key-fn)) {:error :key-fn-required}
+    :else
+    (let [k (key-fn cid)]
+      (if (nil? k)
+        {:error :unkeyable-cid :value cid}
+        (or (get idx k) [])))))
 
 (defn from-provider
   "Normalize a kad/IPNI provider map into a discovery record.
@@ -140,7 +179,21 @@
         {:error :putter-error
          :detail #?(:clj (.getMessage e) :cljs (str e))}))))
 
-(defn cids
-  "CIDs that have at least one provider. Not an identity set — an index."
+(defn keys-with-providers
+  "Index keys that have at least one provider. Not an identity set -- an index.
+
+  Renamed from `cids`, which was true only while the key was a CID. Under a
+  digest keying it would have returned multihashes under a name promising
+  CIDs, and a caller comparing them against a CID would have found nothing and
+  believed it. `sorted-set` is dropped with it: a multihash key is a vector,
+  and this returns keys rather than a sorted report."
   [idx]
-  (into (sorted-set) (keys idx)))
+  (set (clojure.core/keys idx)))
+
+(defn advertised-cids
+  "The `:cid` of every record in `idx`, whatever the index is keyed by.
+
+  What `cids` was reaching for, read off the records instead of off the keys,
+  so it means the same thing under either keying."
+  [idx]
+  (into (sorted-set) (map :cid) (mapcat val idx)))
