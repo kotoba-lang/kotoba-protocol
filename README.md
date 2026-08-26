@@ -106,6 +106,8 @@ CID with `:cid-mismatch`.
 - `kotoba.protocol.vocab` — `:kotoba.actor/*`, `:kotoba.graph/*`, `:kotoba.app/*`, and `:kotoba.link/*`
 - `kotoba.protocol.app` — signed, history-bearing L5 app manifests and capability requests
 - `kotoba.protocol.bridge` — host-mediated capability messages for embedded apps
+- `kotoba.protocol.a2a` — A2A v1.0 Agent Card, text-task admission, Task and JSON-RPC projections
+- `kotoba.protocol.slim` — authority-free, idempotent A2A-over-AGNTCY-SLIM application envelopes
 
 The naming, routing, and discovery live functions normalize injected adapter
 results and fail closed on identity mismatches. Transport and session live

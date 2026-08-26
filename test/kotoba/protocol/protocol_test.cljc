@@ -1,6 +1,7 @@
 (ns kotoba.protocol.protocol-test
   (:require [clojure.test :refer [deftest is testing]]
             [kotoba.protocol.address :as address]
+            [kotoba.protocol.a2a :as a2a]
             [kotoba.protocol.app :as app]
             [kotoba.protocol.bridge]
             [kotoba.protocol.cid :as cid-ns]
@@ -13,12 +14,81 @@
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.route :as route]
             [kotoba.protocol.sealed :as sealed]
+            [kotoba.protocol.slim :as slim]
             [kotoba.protocol.surfaces :as surfaces]
             [kotoba.protocol.transport :as transport]
             [kotoba.protocol.vocab :as vocab]))
 
 (def cid "bafybeidl5t4ztktqmfcqrfqpio6qf64n6t65a7inkz2pa6jq4tyqwfjfhy")
 (def ipns (str "k51qzi5uqu5d" (apply str (repeat 50 "a"))))
+
+;; ── open agent interoperability ─────────────────────────────────────────────
+
+(deftest a2a-v1-text-task-round-trip
+  (let [card (a2a/agent-card
+              {:name "Research Bot"
+               :description "Bounded research"
+               :url "https://example.test/a2a"
+               :version "1.0.0"
+               :skills [{:id "research" :name "Research"
+                         :description "Research one question"
+                         :inputModes ["text/plain"]
+                         :outputModes ["text/plain"]}]})
+        request {:jsonrpc "2.0" :id 7 :method "SendMessage"
+                 :params {:message {:messageId "message-1"
+                                    :contextId "context-1"
+                                    :role "ROLE_USER"
+                                    :parts [{:text "verify this"
+                                             :mediaType "text/plain"}]}}}
+        admitted (a2a/send-message-request request)
+        task (a2a/task {:id "task-1" :context-id (:context-id admitted)
+                        :state "TASK_STATE_COMPLETED"
+                        :timestamp "2026-08-26T00:00:00Z"
+                        :text "verified"})]
+    (is (= [] (a2a/agent-card-problems card)))
+    (is (= "verify this" (:text admitted)))
+    (is (= "message-1" (:message-id admitted)))
+    (is (= {:request-id 8 :task-id "task-1"}
+           (a2a/get-task-request
+            {:jsonrpc "2.0" :id 8 :method "GetTask"
+             :params {:id "task-1"}})))
+    (is (true? (a2a/terminal? task)))
+    (is (= task (:result (a2a/json-rpc-result 7 task))))))
+
+(deftest a2a-admission-is-text-only-and-v1
+  (is (= :invalid-request
+         (:error (a2a/send-message-request
+                  {:jsonrpc "2.0" :id 1 :method "message/send"
+                   :params {:message {:messageId "m" :role "ROLE_USER"
+                                      :parts [{:url "https://private.test"}]}}}))))
+  (is (= :invalid-message
+         (:error (a2a/message-text
+                  {:messageId "m" :role "ROLE_AGENT"
+                   :parts [{:text "pretend to be the user"}]})))))
+
+(deftest slim-envelope-carries-a2a-without-authority
+  (let [ok (slim/envelope
+            {:delivery-id "delivery-1"
+             :from ["cloud-itonami" "owner-a" "bot-a"]
+             :to ["cloud-itonami" "owner-a" "bot-b"]
+             :payload {:jsonrpc "2.0" :id 1 :method "SendMessage"}})]
+    (is (= slim/profile (:profile ok)))
+    (is (= [["cloud-itonami" "owner-a" "bot-a"] "delivery-1"]
+           (slim/delivery-key ok)))
+    (is (true? (slim/authority-free? ok))))
+  (is (= {:error :authority-field-refused :path [:metadata :grant]}
+         (slim/envelope
+          {:delivery-id "delivery-2"
+           :from ["cloud-itonami" "owner-a" "bot-a"]
+           :to ["cloud-itonami" "owner-a" "bot-b"]
+           :payload {:metadata {:grant "never crosses"}}})))
+  (is (= :authority-field-refused
+         (:error
+          (slim/envelope
+           {:delivery-id "delivery-3"
+            :from ["cloud-itonami" "owner-a" "bot-a"]
+            :to ["cloud-itonami" "owner-a" "bot-b"]
+            :payload {"metadata" {"approval_receipt" "never crosses"}}})))))
 
 ;; ── layers ───────────────────────────────────────────────────────────────────
 
@@ -1022,6 +1092,3 @@
         (is (= cid (:value pub))))))
   (is (= :invalid-ipns-name
          (:error (sealed/publish-head "not-a-name" cid)))))
-
-
-
