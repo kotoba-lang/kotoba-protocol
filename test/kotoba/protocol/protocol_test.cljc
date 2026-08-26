@@ -30,6 +30,7 @@
                :description "Bounded research"
                :url "https://example.test/a2a"
                :version "1.0.0"
+               :streaming? true
                :skills [{:id "research" :name "Research"
                          :description "Research one question"
                          :inputModes ["text/plain"]
@@ -46,6 +47,8 @@
                         :timestamp "2026-08-26T00:00:00Z"
                         :text "verified"})]
     (is (= [] (a2a/agent-card-problems card)))
+    (is (= {:streaming true :pushNotifications false}
+           (:capabilities card)))
     (is (= "verify this" (:text admitted)))
     (is (= "message-1" (:message-id admitted)))
     (is (= {:request-id 8 :task-id "task-1"}
@@ -54,6 +57,23 @@
              :params {:id "task-1"}})))
     (is (true? (a2a/terminal? task)))
     (is (= task (:result (a2a/json-rpc-result 7 task))))))
+
+(deftest a2a-v1-streaming-admission-matches-unary-admission
+  (let [request {:jsonrpc "2.0" :id "stream-1"
+                 :method "SendStreamingMessage"
+                 :params {:message {:messageId "message-stream-1"
+                                    :contextId "context-stream-1"
+                                    :role "ROLE_USER"
+                                    :parts [{:text "stream this"}]}}}
+        admitted (a2a/send-streaming-message-request request)]
+    (is (= "stream this" (:text admitted)))
+    (is (= "message-stream-1" (:message-id admitted)))
+    (is (= :invalid-request
+           (:error (a2a/send-message-request request))))
+    (is (= :invalid-request
+           (:error (a2a/send-streaming-message-request
+                    (assoc-in request [:params :message :parts]
+                              [{:url "https://private.test"}])))))))
 
 (deftest a2a-admission-is-text-only-and-v1
   (is (= :invalid-request
