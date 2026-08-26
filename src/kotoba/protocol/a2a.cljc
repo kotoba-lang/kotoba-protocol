@@ -77,14 +77,16 @@
 (defn agent-card
   "Build a minimal A2A v1.0 Agent Card. Skills are already-public host
   projections; this function never derives them from a runtime tool registry."
-  [{:keys [name description url version skills security-schemes security]}]
+  [{:keys [name description url version skills security-schemes security
+           streaming? push-notifications?]}]
   (cond-> {:name name
            :description description
            :version version
            :supportedInterfaces [{:url url
                                   :protocolBinding "JSONRPC"
                                   :protocolVersion protocol-version}]
-           :capabilities {:streaming false :pushNotifications false}
+           :capabilities {:streaming (boolean streaming?)
+                          :pushNotifications (boolean push-notifications?)}
            :defaultInputModes ["text/plain"]
            :defaultOutputModes ["text/plain"]
            :skills (vec skills)}
@@ -114,9 +116,8 @@
       (not (sequential? skills))
       (conj {:field :skills :error :array-required}))))
 
-(defn send-message-request
-  "Validate a JSON-RPC A2A SendMessage call and return its admitted coordinates."
-  [request]
+(defn- send-request
+  [expected-method request]
   (let [method (field request "method")
         params (field request "params")
         message (field params "message")
@@ -126,7 +127,7 @@
                    (conj {:field :jsonrpc :error :version-required})
                    (nil? (field request "id"))
                    (conj {:field :id :error :required})
-                   (not= "SendMessage" method)
+                   (not= expected-method method)
                    (conj {:field :method :error :unsupported-method})
                    (:error parsed)
                    (into (:problems parsed)))]
@@ -135,6 +136,18 @@
       (merge {:request-id (field request "id")
               :tenant (field params "tenant")}
              parsed))))
+
+(defn send-message-request
+  "Validate a JSON-RPC A2A SendMessage call and return its admitted coordinates."
+  [request]
+  (send-request "SendMessage" request))
+
+(defn send-streaming-message-request
+  "Validate a JSON-RPC A2A SendStreamingMessage call for SSE delivery.
+  Admission is identical to SendMessage: this profile remains text-only and
+  a transport choice never widens host input or authority."
+  [request]
+  (send-request "SendStreamingMessage" request))
 
 (defn get-task-request
   "Validate a JSON-RPC A2A GetTask call. Hosts still decide whether the
