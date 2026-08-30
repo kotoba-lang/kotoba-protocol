@@ -1112,3 +1112,66 @@
         (is (= cid (:value pub))))))
   (is (= :invalid-ipns-name
          (:error (sealed/publish-head "not-a-name" cid)))))
+
+;; ── sealed: archive object, identity vs location (ADR-2608301039) ────────────
+
+(def ^:private a-wrap
+  {:recipient "did:key:z6MkfakeRecipientForTests" :wrapped-key "d2hhdGV2ZXI="})
+
+(defn- an-archive-object [& {:as overrides}]
+  (sealed/archive-object
+   (merge {:identity raw-cid :location other-raw-cid :wraps [a-wrap] :size 4096}
+          overrides)))
+
+(deftest sealed-archive-object-splits-identity-from-location
+  (let [o (an-archive-object)]
+    (is (true? (sealed/archive-object? o)))
+    (is (= :object (:construction o)))
+    (is (= raw-cid (:identity o)) "identity is the plaintext CID")
+    (is (= other-raw-cid (:location o)) "location is the ciphertext CID")
+    (is (not= (:identity o) (:location o)))
+    (is (= [a-wrap] (:wraps o)))
+    (is (= :xchacha20-poly1305 (:alg o)))))
+
+(deftest sealed-archive-object-rejects-identity-as-location
+  (is (= :identity-is-location
+         (:error (an-archive-object :location raw-cid)))
+      "equal CIDs mean the bytes went out unsealed, or the ciphertext was
+       derived from the plaintext (convergent, ADR-2608070400 D5)"))
+
+(deftest sealed-archive-object-requires-a-recipient
+  (is (= :no-recipients (:error (an-archive-object :wraps [])))
+      "an object nobody can open is not sealed, it is lost")
+  (is (= :missing-recipient
+         (:error (an-archive-object :wraps [{:wrapped-key "k"}]))))
+  (is (= :missing-wrapped-key
+         (:error (an-archive-object :wraps [{:recipient "did:key:z6Mk"}])))))
+
+(deftest sealed-archive-object-refuses-to-carry-secrets
+  (is (= :plaintext-in-archive-object
+         (:error (an-archive-object :plaintext "the bytes"))))
+  (is (= :content-key-in-archive-object
+         (:error (an-archive-object :content-key "the key itself")))))
+
+(deftest sealed-archive-object-is-not-a-session
+  (is (= :construction-mismatch
+         (:error (an-archive-object :construction :session)))
+      "envelope has no ratchet; a session descriptor is `attachment`"))
+
+(deftest sealed-archive-object-rejects-malformed-cids
+  (is (= :invalid-identity-cid (:error (an-archive-object :identity "nope"))))
+  (is (= :invalid-location-cid (:error (an-archive-object :location "nope"))))
+  (is (= :invalid-size (:error (an-archive-object :size -1)))))
+
+(deftest sealed-archive-store-view-hides-identity-and-wraps
+  (let [view (sealed/store-view (an-archive-object))]
+    (is (= #{:cid :size} (set (keys view)))
+        "a provider that logged everything it received still learns only this")
+    (is (= other-raw-cid (:cid view)) "keyed by the ciphertext CID")
+    (is (nil? (:identity view)))
+    (is (nil? (:wraps view)))
+    (is (not (some #{raw-cid} (tree-seq coll? seq view)))
+        "the plaintext CID appears nowhere in what the store receives"))
+  (is (false? (sealed/store-learns-identity?)))
+  (is (= :not-an-archive-object
+         (:error (sealed/store-view {:kind :sealed-message})))))

@@ -278,3 +278,96 @@
      :value head-cid
      :confidential? false
      :mutates-name? false}))
+
+;; ── archive object (identity stays private; location goes to the store) ──────
+
+(defn wrap
+  "One copy of the content key, sealed to one recipient. The content key
+  itself is never stored — only wraps of it. Sharing re-wraps the key; it
+  does not re-encrypt the object."
+  [{:keys [recipient wrapped-key]}]
+  (cond
+    (not (and (string? recipient) (seq recipient)))
+    {:error :missing-recipient}
+    (not (and (string? wrapped-key) (seq wrapped-key)))
+    {:error :missing-wrapped-key}
+    :else {:recipient recipient :wrapped-key wrapped-key}))
+
+(defn archive-object
+  "A large object sealed with the :object construction and archived under
+  its ciphertext CID (ADR-2608301039).
+
+  Two CIDs, and they are not interchangeable (ADR-2608148200):
+
+    :identity — CID of the plaintext. For a DataLad/git-annex object this
+                is the annex key `SHA256E-s<n>--<sha256>` read as
+                CIDv1(raw, sha2-256). It names what the object IS, and it
+                does not reach the object store.
+    :location — CID of the ciphertext. This is what the archive door
+                verifies and what the store is keyed by.
+
+  Wraps live on the datom plane, not in the object store. An archive
+  object with no wraps is not sealed, it is lost.
+
+  `attachment` is the session-path sibling: there the wrapped key travels
+  inside the Signal ciphertext. An archive object has no session for a key
+  to travel inside, so the wraps are named here and stored elsewhere.
+
+  `:identity` = `:location` is an error *for this constructor only*. A
+  plain unencrypted document may legitimately have one CID in both roles
+  (ADR-2608148200); but this constructor requires wraps, so equal CIDs
+  mean the bytes went out unsealed, or that the ciphertext was derived
+  from the plaintext — which is convergent encryption (forbidden,
+  ADR-2608070400 D5)."
+  [{:keys [identity location wraps size alg] :as m}]
+  (let [wrapped (mapv wrap (or wraps []))]
+    (cond
+      (contains? m :plaintext) {:error :plaintext-in-archive-object}
+      (contains? m :content-key) {:error :content-key-in-archive-object}
+      (and (contains? m :construction) (not= :object (:construction m)))
+      {:error :construction-mismatch :expected :object :got (:construction m)}
+      (not (vocab/cid? identity)) {:error :invalid-identity-cid :value identity}
+      (not (vocab/cid? location)) {:error :invalid-location-cid :value location}
+      (= identity location) {:error :identity-is-location :value location}
+      (not (seq wrapped)) {:error :no-recipients}
+      (some :error wrapped) (first (filter :error wrapped))
+      (and (some? size) (not (nat-int? size))) {:error :invalid-size :value size}
+      :else
+      (cond-> {:version version
+               :kind :archive-object
+               :construction :object
+               :identity identity
+               :location location
+               :wraps wrapped
+               :alg (or alg :xchacha20-poly1305)}
+        (some? size) (assoc :size size)))))
+
+(defn archive-object?
+  [o]
+  (boolean (and (map? o)
+                (not (:error o))
+                (= :archive-object (:kind o))
+                (= :object (:construction o)))))
+
+(defn store-view
+  "Exactly what the object store may learn: the location CID, and the size
+  it would measure anyway.
+
+  Identity, wraps and recipients are absent by construction, so a provider
+  that logged everything it received still could not name the plaintext or
+  say who can open it. This is the executable form of `the provider is
+  outside the trust boundary` (ADR-2608070400 D1) — the reason the choice
+  of S3 / R2 / B2 / IPFS is a durability question and not a trust one."
+  [o]
+  (cond
+    (:error o) o
+    (not (archive-object? o)) {:error :not-an-archive-object}
+    :else (cond-> {:cid (:location o)}
+            (some? (:size o)) (assoc :size (:size o)))))
+
+(defn store-learns-identity?
+  "False. The archive store is keyed by the ciphertext CID. The plaintext
+  CID lives on the private plane that also holds the wraps, so replacing
+  the provider never widens what is disclosed."
+  []
+  false)
