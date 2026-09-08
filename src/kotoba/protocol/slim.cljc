@@ -4,7 +4,7 @@
   SLIM owns routing, sessions, reconnect and group delivery. This pure model
   owns what a Kotoba host is willing to place inside that transport. It does
   not pretend that constructing an envelope establishes a SLIM session."
-  (:require [clojure.string :as str]))
+  (:require [kotoba.lang.text :as str]))
 
 (def profile "org.kotoba.a2a-over-slim/1")
 
@@ -17,7 +17,7 @@
   (-> (if (keyword? value) (name value) (str value))
       (str/replace #"_" "-")
       (str/replace #"([a-z0-9])([A-Z])" "$1-$2")
-      str/lower-case))
+      str/lower))
 
 (defn- forbidden-path
   ([value] (forbidden-path [] value))
