@@ -9,7 +9,7 @@
   process is not a DHT node. Do not inject a dialer here to raise
   :live. Framing lives in io-libp2p-specs-transport; this plane only
   says what a hop is and what it must not become."
-  (:require [clojure.string :as str]
+  (:require [kotoba.lang.text :as str]
             [kotoba.protocol.ref :as ref]
             [kotoba.protocol.vocab :as vocab]))
 
