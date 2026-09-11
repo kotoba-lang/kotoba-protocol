@@ -126,8 +126,8 @@ operations return named blocked states; they do not fake network maturity.
 ## Development
 
 ```bash
-clojure -M:test
-clojure -M:lint
+kbb -M:test
+kbb -M:lint
 ```
 
 The test suite is the executable drift detector for the declared boundaries.
