@@ -1,5 +1,5 @@
 (ns kotoba.protocol.protocol-test
-  (:require [clojure.test :refer [deftest is testing]]
+  (:require [kotoba.test :refer [deftest is testing]]
             [kotoba.protocol.address :as address]
             [kotoba.protocol.a2a :as a2a]
             [kotoba.protocol.app :as app]
