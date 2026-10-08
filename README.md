@@ -68,6 +68,13 @@ authority is `kotoba.protocol.layers/planes`, `link-kinds`, and
 | L4 distribution | retrieval, pinning, B2 offload, provider discovery, IPNS publish/resolve | `kotobase`, `ipfs-pinner`, `io-libp2p-specs-kad-dht` |
 | L5 application | actor execution, app manifests, appviews, embeds | `kototama`, `wasm-webcomponent`, this repository |
 
+Agent-centric reading (proposed in root ADR-2610082200, not yet implemented):
+L2 also holds each cell's source chain (糸 ito, built on `chain`), L4 also
+holds the per-mon DHT (布 nuno, keyed on `io-libp2p-specs-kad-dht`) next to
+the yataverse bytes lake, and L5's app manifest becomes the kotoba app (kind
+`:app`, roles, UI, `:provides` / `:requires`). `kotobase-peer` has been feature
+frozen since 2026-08-04 and does not take new L2 behaviour.
+
 The L2 graph CID is supplied by an injected `chain.core/commit!`-shaped
 function. `kotoba-protocol` does not hash it. An archive `Location` may be the
 raw CID of the same bytes, while the graph identity CID may use another codec;
