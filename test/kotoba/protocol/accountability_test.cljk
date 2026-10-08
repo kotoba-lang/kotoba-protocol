@@ -217,3 +217,44 @@
                                                :from cid :to raw-cid
                                                :action :content/read
                                                :context {:at 300}}))))))
+
+;; ── R1: policy composition ──────────────────────────────────────────────────
+
+(deftest compose-takes-stricter-tier-and-intersects-params
+  (let [other (-> policy
+                  (assoc :policy/effective-from 400)
+                  (assoc-in [:policy/actions :content/post :tier] :t2)
+                  (assoc-in [:policy/params :param/notice-max-days] {:min 0 :max 30})
+                  (assoc-in [:policy/actions :vote/cast] {:externality :anonymity-is-value :tier :t0}))
+        {p :policy :as out} (acc/compose-policies [policy other])]
+    (is (nil? (:error out)))
+    (is (= :t2 (get-in p [:policy/actions :content/post :tier])))
+    (is (= :t0 (get-in p [:policy/actions :vote/cast :tier])))
+    (is (= {:min 0 :max 30} (get-in p [:policy/params :param/notice-max-days])))
+    (is (= 400 (:policy/effective-from p)))
+    (is (nil? (:policy/id p)) "composed is derived, not adopted")))
+
+(deftest compose-fails-closed
+  (is (= :no-policies (:error (acc/compose-policies []))))
+  (is (= :invalid-policy
+         (:error (acc/compose-policies [policy (assoc policy :policy/l0 "x")]))))
+  (is (= :param-range-empty
+         (:error (acc/compose-policies
+                  [policy (assoc-in policy [:policy/params :param/notice-max-days] {:min 400 :max 500})])))))
+
+;; ── R1: receipt visibility ──────────────────────────────────────────────────
+
+(deftest self-access-is-owner-only-everything-else-operator
+  (is (= :owner-only (acc/receipt-visibility {:accessor did :owner did})))
+  (is (= :operator (acc/receipt-visibility {:accessor did :owner "did:key:z6MkpTHR8VHsExkJxkgDwbwisfb5Tq2mWiwWjcmSKqU2E"})))
+  (is (= :operator (acc/receipt-visibility {:accessor nil :owner did})))
+  (is (= :operator (acc/receipt-visibility {:accessor "kotobase.net" :owner "kotobase.net"}))
+      "a hostname is never an owner"))
+
+(deftest owner-only-receipt-carries-no-reader-metadata
+  (is (= [] (acc/receipt-errors {:visibility :owner-only :graph cid
+                                 :operation "key:requestShare" :ts-unix 1})))
+  (is (= :owner-only-receipt-leaks
+         (:error (first (acc/receipt-errors {:visibility :owner-only :graph cid
+                                             :operation "datom:q" :ts-unix 1
+                                             :accessor did :purpose "x"}))))))
