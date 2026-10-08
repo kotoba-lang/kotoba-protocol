@@ -11,24 +11,32 @@
     author ≠ graph-owner               → deny (foreign chain)
     governor-fn is nil                 → deny (not allow)
     host string as author              → deny :not-a-key
+    :action named, tier short          → deny :tier-insufficient
+    :action named, no policy bound     → deny :accountability-unbound
 
   Overlay only. Merkle rewrite is never a governed write — that is
   a CID lie (`graph/put-node` `:cid-mismatch`)."
-  (:require [kotoba.protocol.graph :as graph]
+  (:require [kotoba.protocol.accountability :as accountability]
+            [kotoba.protocol.graph :as graph]
             [kotoba.protocol.vocab :as vocab]))
 
 (defn intent
-  [{:keys [author graph-owner from to tag cacao]}]
-  {:plane :authorization
-   :author author
-   :graph-owner graph-owner
-   :from from
-   :to to
-   :tag tag
-   :cacao cacao})
+  "`:action`, `:tier`, `:accountability` (bindings) and `:context` are
+  the ADR-2610081200 tier check. Omit `:action` and it does not run."
+  [{:keys [author graph-owner from to tag cacao action tier accountability context]}]
+  (cond-> {:plane :authorization
+           :author author
+           :graph-owner graph-owner
+           :from from
+           :to to
+           :tag tag
+           :cacao cacao}
+    action (assoc :action action
+                  :tier tier
+                  :accountability accountability
+                  :context context)))
 
-(defn decide
-  "Pure default governor. Fail closed. Does not verify signatures."
+(defn- decide-chain
   [{:keys [author graph-owner cacao] :as intent}]
   (cond
     (:error intent) intent
@@ -45,6 +53,16 @@
     (and (map? cacao) (not= 1 (:depth cacao)))
     {:deny :depth :value (:depth cacao)}
     :else {:deny :cacao-shape :value cacao}))
+
+(defn decide
+  "Pure default governor. Fail closed. Does not verify signatures.
+  The chain check runs first; a tier check runs only for a named
+  `:action`, and a missing binding is a deny, not an allow."
+  [intent]
+  (let [verdict (decide-chain intent)]
+    (if (and (= :allow verdict) (contains? intent :action))
+      (accountability/decide intent)
+      verdict)))
 
 (defn write-overlay
   "Apply an overlay write only if the governor allows it.
