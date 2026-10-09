@@ -9,6 +9,8 @@ A hostname cannot authorize a write. Keys authorize writes.
 - delegation: Biscuit — principal to principal, attenuated offline
 - decision: the `authority` lattice (`covers?` / `meet`). One implementation
 - admission: a governor rejects an intent before the actor reaches the log
+- accountability: an intent naming an `:action` must hold the tier its policy
+  requires ([Accountability tiers](accountability.md))
 
 CreateLink-shaped overlay writes pass through this boundary before reaching a
 datom log or DHT metadata. Authorization to add an overlay does not authorize a
