@@ -45,3 +45,25 @@ warrant CID, an authorizer the profile names, a transparency-log entry, and a
 trustee set where no jurisdiction or organisation holds more than one third.
 `:t0` and `:t1` return `:no-disclosure-path`. Admissible is not executed: the
 k-of-n opening lives elsewhere.
+
+## R1: pairwise DIDs, policy composition, receipt visibility
+
+**Pairwise DIDs** (`kotoba.protocol.pairwise`) give tier `:t1` its meaning: one
+root seed, a different `did:key` per context, derived as
+`HKDF-SHA256(root-seed, salt "kotoba/pairwise/v1", info context, 32)` → Ed25519
+seed. A context is a canonical ref or a reverse-DNS id, never free text.
+`binding-errors` rejects one DID in two contexts (`:linked-across-contexts`),
+a context bound twice, and the root DID shown as a pairwise DID. Derivation
+itself lives in kotoba-auth.
+
+**`compose-policies`** is the meet of whole policies: the union of acts, each
+at the stricter tier, and each param at the intersection of ranges. An empty
+intersection is `:param-range-empty`; two escalations on different params are
+`:escalate-conflict`. The result is derived, not adopted, so it has no id.
+
+**Receipt visibility.** Receipts are always written: an unreceipted key release
+is still a custodian offence. `receipt-visibility` makes self-access
+(`accessor = owner`, both `did:key`) `:owner-only`; everything else, anonymous
+included, stays `:operator`. An owner-only receipt carries only
+`owner-only-receipt-fields` (graph, operation, timestamp, visibility) in
+plaintext — enough for the custody cross-audit, nothing about the reader.

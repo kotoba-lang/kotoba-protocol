@@ -405,3 +405,80 @@
              (when-not (ref/canonical-ref-uri? log-entry)
                {:error :l0-violation :invariant :l0/disclosure-always-logged})])
     (trustee-set-errors trustee-set))))
+
+;; ── policy composition (R1) ─────────────────────────────────────────────────
+
+(defn- compose-param [a b]
+  (let [lo (keep :min [a b])
+        hi (keep :max [a b])]
+    (cond-> {}
+      (seq lo) (assoc :min (apply max lo))
+      (seq hi) (assoc :max (apply min hi)))))
+
+(defn- compose-action [a b]
+  (let [ea (:escalate a) eb (:escalate b)
+        stricter-ext (if (tier>= (floor-of (:externality a)) (floor-of (:externality b)))
+                       (:externality a)
+                       (:externality b))]
+    (cond
+      (and ea eb (not= (:above ea) (:above eb)))
+      {:error :escalate-conflict :params [(:above ea) (:above eb)]}
+      :else
+      (cond-> {:externality stricter-ext
+               :tier (max-tier (:tier a) (:tier b))}
+        (or ea eb) (assoc :escalate {:above (:above (or ea eb))
+                                     :to (apply max-tier (keep :to [ea eb]))})))))
+
+(defn compose-policies
+  "The meet of whole policies: every act from any of them, each at the
+  stricter tier; every param at the intersection of ranges. The result
+  is derived, not adopted, so it carries no id. → {:policy p} | {:error …}."
+  [policies]
+  (let [invalid (first (keep-indexed (fn [i p] (when-not (valid-policy? p) i)) policies))]
+    (cond
+      (empty? policies) {:error :no-policies}
+      invalid {:error :invalid-policy :index invalid}
+      :else
+      (let [actions (apply merge-with
+                           (fn [a b] (if (:error a) a (compose-action a b)))
+                           (map :policy/actions policies))
+            params (apply merge-with compose-param (map :policy/params policies))
+            bad-act (some (fn [[act v]] (when (:error v) (assoc v :action act))) actions)
+            bad-param (some (fn [[k {:keys [min max]}]]
+                              (when (and min max (> min max))
+                                {:error :param-range-empty :param k}))
+                            params)
+            p {:policy/l0 l0-version
+               :policy/effective-from (apply max (map :policy/effective-from policies))
+               :policy/params params
+               :policy/actions actions}]
+        (or bad-act
+            bad-param
+            (when-let [errs (seq (policy-errors p))] {:error :composed-invalid :errors (vec errs)})
+            {:policy p})))))
+
+;; ── receipt visibility (R1) ─────────────────────────────────────────────────
+
+(def owner-only-receipt-fields
+  "What an owner-only receipt may carry in plaintext: enough for a
+  custody cross-audit to match a key release, nothing about the reader."
+  #{:graph :operation :ts-unix :visibility})
+
+(defn receipt-visibility
+  "Self-access is receipted to the owner only. Anyone else's access,
+  anonymous included, stays operator-visible. Receipts are always
+  written: an unreceipted key release is still a custodian offence."
+  [{:keys [accessor owner]}]
+  (if (and (vocab/did-key? accessor) (= accessor owner))
+    :owner-only
+    :operator))
+
+(defn receipt-errors
+  "[] when `receipt` carries no more than its visibility allows."
+  [{:keys [visibility] :as receipt}]
+  (case visibility
+    :operator []
+    :owner-only (if-let [extra (seq (remove owner-only-receipt-fields (keys receipt)))]
+                  [{:error :owner-only-receipt-leaks :keys (vec (sort extra))}]
+                  [])
+    [{:error :unknown-visibility :value visibility}]))
