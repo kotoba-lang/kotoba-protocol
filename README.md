@@ -147,3 +147,14 @@ network runtime into this repository.
 層・通信面・責務分離の正本です。このrepoはpure `.cljc` の宣言・代数・検証のみを
 持ち、DHT node、socket、永続DB、暗号鍵管理を実装しません。日本語から参照する場合も、
 上の英語本文と `kotoba.protocol.layers` のmachine-readable dataを正とします。
+
+## Target-neutral and distributed stack architecture
+
+Owns the orthogonal communication planes and L0–L5 data model, not sockets, a DHT runtime, persistent DB or a consensus implementation. Holochain-inspired agent history/integrity, IPFS/IPLD content/distribution and EVM-inspired deterministic execution/order are composed at explicit boundaries. Missing validation dependencies are unresolved, never accepted by fallback. Policy governance retains explicit decentralized consensus domains.
+
+See the [owner integration guide and dependency direction](docs/stack-architecture.md),
+[composition metadata](spec/stack-integration.edn), and
+[whole-stack refactor procedure](https://github.com/kotoba-lang/kotoba-lang/blob/main/docs/stack-refactor-procedure.md).
+The direction is adopted; runtime contract migration and qualification remain
+explicit, separately verified work. Tier labels are responsibility axes, not
+a single dependency ranking.
