@@ -36,7 +36,7 @@
    {:layer :l3-authority
     :name "authority"
     :responsibility "Ed25519 did:key。graph 名 = 鍵由来 IPNS 名。書込認可 = CACAO capability chain (自 graph へは depth-1 自己 mint)。AUTHORITY は鍵由来 IPNS 名への署名であってサーバではない"
-    :impl-repos ["kotobase-client (kotobase.cacao/cid)" "kotoba-auth" "tech-ipfs-specs-ipns"]}
+    :impl-repos ["kotobase-client (kotobase.cacao/cid)" "org-chainagnostic-cacao" "org-ietf-ed25519" "tech-ipfs-specs-ipns"]}
 
    {:layer :l4-distribution
     :name "distribution"
@@ -78,12 +78,12 @@
    {:plane :session
     :readme "docs/mux-and-head.md"
     :responsibility "認証済みストリームと因果の先端。Noise / Yamux / source-chain head / inga quorum cert"
-    :impl-repos ["noise" "inga" "kotoba-auth"]}
+    :impl-repos ["noise" "inga" "org-ietf-ed25519"]}
 
    {:plane :authorization
     :readme "docs/who-may-write.md"
     :responsibility "誰が overlay を書いてよいか。CACAO / governor / Holochain membrane 相当。サーバは authority ではない。拒否した書込は action log に届かない"
-    :impl-repos ["kotoba-auth" "cacao" "kotoba-protocol (govern)"]}
+    :impl-repos ["org-chainagnostic-cacao" "org-ietf-ed25519" "kotoba-protocol (govern)"]}
 
    {:plane :content-protocol
     :readme "docs/content-protocol.md"

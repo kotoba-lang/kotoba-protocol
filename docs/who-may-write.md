@@ -22,7 +22,7 @@ Datalog join one current reference.
 
 There is no live HTTP endpoint here. The executable seam is
 `kotoba.protocol.govern/write-overlay`. Its default `decide` function does not
-verify signatures—cryptography belongs to `cacao`/`kotoba-auth`—but the shape
+verify signatures—cryptography belongs to `org-chainagnostic-cacao`/`org-ietf-ed25519`—but the shape
 still fails closed:
 
 - own graph with no CACAO: allow as a depth-1 self-mint
