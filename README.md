@@ -2,7 +2,7 @@
 
 The normative ownership map and executable algebra for Kotoba's sovereign,
 content-addressed application and data stack. It is spec-first, portable
-`.cljc`, and has zero runtime dependencies.
+`.cljk`, and has zero runtime dependencies.
 
 This repository owns declarations, pure validation, and tests. Implementations
 live in focused sibling repositories. It does **not** open sockets, run a DHT,
@@ -64,7 +64,7 @@ authority is `kotoba.protocol.layers/planes`, `link-kinds`, and
 | L0 address | bytes to CID | `io-multiformats`, `io-ipld`, `dag-cbor` |
 | L1 fact | append-only datoms, including overlay edges | `datom` |
 | L2 graph | ordered action log and committed graph CID | `chain`, `kotobase-peer`, `prolly-tree`, `mst`, `arrangement` |
-| L3 authority | `did:key`, key-derived IPNS, CACAO write authority | `cacao`, `kotoba-auth`, `tech-ipfs-specs-ipns` |
+| L3 authority | `did:key`, key-derived IPNS, CACAO write authority | `cacao`, `org-ietf-ed25519`, `tech-ipfs-specs-ipns` |
 | L4 distribution | retrieval, pinning, B2 offload, provider discovery, IPNS publish/resolve | `kotobase`, `ipfs-pinner`, `io-libp2p-specs-kad-dht` |
 | L5 application | actor execution, app manifests, appviews, embeds | `kototama`, `wasm-webcomponent`, this repository |
 
@@ -144,7 +144,7 @@ network runtime into this repository.
 ## 日本語概要
 
 `kotoba-protocol` は、Kotoba の content-addressed application/data stack における
-層・通信面・責務分離の正本です。このrepoはpure `.cljc` の宣言・代数・検証のみを
+層・通信面・責務分離の正本です。このrepoはpure `.cljk` の宣言・代数・検証のみを
 持ち、DHT node、socket、永続DB、暗号鍵管理を実装しません。日本語から参照する場合も、
 上の英語本文と `kotoba.protocol.layers` のmachine-readable dataを正とします。
 
