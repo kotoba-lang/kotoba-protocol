@@ -64,7 +64,7 @@ authority is `kotoba.protocol.layers/planes`, `link-kinds`, and
 | L0 address | bytes to CID | `io-multiformats`, `io-ipld`, `dag-cbor` |
 | L1 fact | append-only datoms, including overlay edges | `datom` |
 | L2 graph | ordered action log and committed graph CID | `chain`, `kotobase-peer`, `prolly-tree`, `mst`, `arrangement` |
-| L3 authority | `did:key`, key-derived IPNS, CACAO write authority | `cacao`, `org-ietf-ed25519`, `tech-ipfs-specs-ipns` |
+| L3 authority | `did:key`, key-derived IPNS, CACAO write authority | `org-chainagnostic-cacao`, `org-ietf-ed25519`, `tech-ipfs-specs-ipns` |
 | L4 distribution | retrieval, pinning, B2 offload, provider discovery, IPNS publish/resolve | `kotobase`, `ipfs-pinner`, `io-libp2p-specs-kad-dht` |
 | L5 application | actor execution, app manifests, appviews, embeds | `kototama`, `wasm-webcomponent`, this repository |
 
@@ -127,7 +127,7 @@ operations return named blocked states; they do not fake network maturity.
 - [`kotoba-lang/kotobase`](https://github.com/kotoba-lang/kotobase) owns the persistent Datalog and content-addressed database.
 - [`kotoba-lang/kototama`](https://github.com/kotoba-lang/kototama) owns component admission and capability binding at execution.
 - [`kotoba-lang/atprotocol`](https://github.com/kotoba-lang/atprotocol) is an AT Protocol projection over this model, not this repository's core.
-- `io-libp2p-specs-kad-dht`, `io-libp2p-specs-transport`, `noise`, `cacao`, and `tech-ipfs-specs-ipns` own their focused network or cryptographic implementations.
+- `io-libp2p-specs-kad-dht`, `io-libp2p-specs-transport`, `noise`, `org-chainagnostic-cacao`, `org-ietf-ed25519`, and `tech-ipfs-specs-ipns` own their focused network or cryptographic implementations.
 - [`kotoba-lang/envelope`](https://github.com/kotoba-lang/envelope) owns object-at-rest encryption (Storj-Uplink analog). [`kotoba-lang/org-signal`](https://github.com/kotoba-lang/org-signal) owns X3DH + Double Ratchet. IPFS/IPLD/IPNS core specs do not.
 
 ## Development
