@@ -13,7 +13,8 @@
                            len  = 32)
     did_ctx  = did:key of the Ed25519 key with seed seed_ctx
 
-  This ns does not hash or derive keys — crypto lives in kotoba-auth.
+  This ns does not hash or derive keys — Ed25519 and did:key live in
+  org-ietf-ed25519.
   It owns the context grammar, the derivation constants, and the shape
   check that fails closed:
 

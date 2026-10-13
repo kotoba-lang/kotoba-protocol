@@ -15,7 +15,8 @@
 
   Two bindings that meet take the stricter requirement (max tier).
   Nothing here verifies a credential or a signature: the held tier is
-  a claim that `kotoba-auth` / credential verification must back.
+  a claim that credential verification (org-chainagnostic-cacao /
+  org-ietf-ed25519) must back.
   The shape is enough to fail closed:
 
     unknown act, unbound act, missing threshold   → strictest outcome
