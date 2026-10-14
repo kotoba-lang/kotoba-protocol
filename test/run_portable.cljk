@@ -17,6 +17,7 @@
 (require '[cljs.test :as t]
          '[kotoba.protocol.accountability-test]
          '[kotoba.protocol.pairwise-test]
+         '[kotoba.protocol.ratelimit-test]
          '[kotoba.protocol.protocol-test])
 
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
@@ -24,4 +25,5 @@
 
 (t/run-tests 'kotoba.protocol.accountability-test
              'kotoba.protocol.pairwise-test
+             'kotoba.protocol.ratelimit-test
              'kotoba.protocol.protocol-test)
