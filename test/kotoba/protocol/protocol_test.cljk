@@ -8,6 +8,7 @@
             [kotoba.protocol.discover :as discover]
             [kotoba.protocol.graph :as graph]
             [kotoba.protocol.govern :as govern]
+            [kotoba.protocol.install :as install]
             [kotoba.protocol.layers :as layers]
             [kotoba.protocol.mux :as mux]
             [kotoba.protocol.naming :as naming]
@@ -1204,3 +1205,167 @@
   (is (false? (sealed/store-learns-identity?)))
   (is (= :not-an-archive-object
          (:error (sealed/store-view {:kind :sealed-message})))))
+
+;; ── app installation / offline launch ───────────────────────────────────────
+
+(def ^:private app-dna-cid
+  "bafyreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u")
+(def ^:private app-dna-cid-next
+  (str (subs app-dna-cid 0 10) "a" (subs app-dna-cid 11)))
+
+(defn- sample-install-release
+  ([manifest-overrides] (sample-install-release manifest-overrides {}))
+  ([manifest-overrides release-overrides]
+   (merge {:verified? true
+           :app-id "app.murakumo.cloud"
+           :channel "stable"
+           :publisher-did "did:key:z6MkoPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq"
+           :sequence 1
+           :release-cid cid
+           :manifest-cid cid
+           :manifest (merge {:kotoba.app/id "app.murakumo.cloud"
+                             :kotoba.app/version "1.0.0"
+                             :kotoba.app/kind "appview"
+                             :kotoba.app/appview-of {:routes ["/"]}
+                             :kotoba.app/bundle-cid cid
+                             :kotoba.app/caps ["graph/query"]}
+                            manifest-overrides)}
+          release-overrides)))
+
+(deftest app-install-lock-needs-a-verified-immutable-release
+  (let [created (install/create-install-lock (sample-install-release {}))
+        lock (:ok created)]
+    (is (= install/install-lock-schema (:schema lock)))
+    (is (= "app.murakumo.cloud" (:app-id lock)))
+    (is (= ["graph/query"] (:requested-caps lock)))
+    (is (= [] (install/install-lock-problems lock)))
+    (is (not (contains? lock :domain)))
+    (is (not (contains? lock :locally-approved)))
+    (is (= :release-not-verified
+           (:error (first (:problems
+                           (install/create-install-lock
+                            (assoc (sample-install-release {}) :verified? false)))))))
+    (is (some #(= :invalid-cid (:error %))
+              (:problems (install/create-install-lock
+                          (assoc (sample-install-release {})
+                                 :manifest-cid
+                                 "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG")))))
+    (is (some #(= :immutable-bundle-required (:error %))
+              (:problems (install/create-install-lock
+                          (sample-install-release
+                           {:kotoba.app/bundle-cid nil
+                            :kotoba.app/embed-url "https://example.test/app"})))))))
+
+(deftest app-update-preserves-identity-and-reports-consent-delta
+  (let [current (:ok (install/create-install-lock (sample-install-release {})))
+        candidate (sample-install-release
+                   {:kotoba.app/version "1.1.0"
+                    :kotoba.app/caps ["graph/query" "graph/transact"]}
+                   {:sequence 2
+                    :release-cid app-dna-cid
+                    :manifest-cid app-dna-cid-next})
+        plan (install/plan-update current candidate)
+        next-lock (:lock plan)]
+    (is (= :ready (:decision plan)))
+    (is (= ["graph/transact"] (:consent-required-caps plan)))
+    (is (true? (:capability-expansion? plan)))
+    (is (= ["graph/query"]
+           (install/effective-capabilities next-lock
+                                           ["graph/query" "*"]
+                                           ["graph/query" "graph/transact"])))
+    (is (= ["graph/query" "graph/transact"]
+           (install/effective-capabilities next-lock
+                                           ["graph/query" "graph/transact"]
+                                           ["graph/query" "graph/transact"])))
+    (is (= :stale-release
+           (:error (install/plan-update current
+                                        (sample-install-release
+                                         {:kotoba.app/version "0.9.0"})))))))
+
+(deftest app-update-refuses-publisher-and-cell-identity-changes
+  (let [current (:ok (install/create-install-lock
+                      (sample-install-release
+                       {:kotoba.app/cells [{:id "app.murakumo.state"
+                                            :dna-cid app-dna-cid}]})))
+        publisher-change (install/plan-update
+                          current
+                          (sample-install-release
+                           {:kotoba.app/cells [{:id "app.murakumo.state"
+                                                :dna-cid app-dna-cid}]}
+                           {:sequence 2
+                            :publisher-did "did:key:z6MkpPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq"}))
+        cell-change (install/plan-update
+                     current
+                     (sample-install-release
+                      {:kotoba.app/cells [{:id "app.murakumo.state"
+                                           :dna-cid app-dna-cid-next}]}
+                      {:sequence 2}))]
+    (is (= :publisher-changed (:error publisher-change)))
+    (is (= :requires-cell-migration (:decision cell-change)))
+    (is (= "app.murakumo.state" (get-in cell-change [:changed-cells 0 :cell-id])))))
+
+(deftest app-launch-uses-verified-cache-while-domain-is-offline
+  (let [lock (:ok (install/create-install-lock (sample-install-release {})))
+        required (set (install/required-content-cids lock))
+        launch (install/launch-decision
+                lock {:verified-cids required
+                      :locally-approved ["graph/query" "graph/transact"]
+                      :host-supported ["graph/query" "graph/transact"]
+                      :domain-status :offline})]
+    (is (= :launch (:decision launch)))
+    (is (= :offline (:domain-status launch)))
+    (is (false? (:requires-network? launch)))
+    (is (= ["graph/query"] (:capabilities launch)))
+    (is (= :content-not-verified
+           (:error (install/launch-decision
+                    lock {:verified-cids (disj required (:bundle-cid lock))}))))))
+
+(deftest public-entry-resolution-binds-domain-owner-app-publisher-and-channel
+  (let [owner "did:key:z6MkoPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq"
+        binding {:verified? true
+                 :entry-cid cid
+                 :domain "murakumo.cloud"
+                 :app-id "app.murakumo.cloud"
+                 :publisher-did owner
+                 :channel "stable"
+                 :domain-owner-did owner
+                 :expires-at 4102444800}
+        proof {:verified? true :fresh? true
+               :domain "murakumo.cloud" :binding-cid cid}
+        release (sample-install-release {} {:app-id "app.murakumo.cloud"
+                                            :channel "stable"})
+        resolved (install/resolve-entry "murakumo.cloud" binding proof release
+                                        1792000000)]
+    (is (= :resolved (:decision resolved)))
+    (is (= "app.murakumo.cloud" (:app-id resolved)))
+    (is (= cid (:binding-cid resolved)))
+    (is (= "stable" (:channel resolved)))
+    (is (= "app.murakumo.cloud" (get-in resolved [:install-lock :app-id])))
+    (is (not (contains? (:install-lock resolved) :domain)))
+    (is (= :binding-domain-mismatch
+           (:error (install/resolve-entry "aozora.app" binding proof release
+                                          1792000000))))
+    (is (= :binding-publisher-mismatch
+           (:error (install/resolve-entry
+                    "murakumo.cloud"
+                    (assoc binding :publisher-did
+                           "did:key:z6MkpPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq")
+                    proof release 1792000000))))
+    (is (= :binding-channel-mismatch
+           (:error (install/resolve-entry "murakumo.cloud"
+                                          (assoc binding :channel "preview")
+                                          proof release 1792000000))))
+    (is (= :domain-proof-not-fresh
+           (:error (install/resolve-entry "murakumo.cloud" binding
+                                          (assoc proof :fresh? false) release
+                                          1792000000))))
+    (is (= :domain-proof-binding-mismatch
+           (:error (install/resolve-entry "murakumo.cloud" binding
+                                          (assoc proof :binding-cid app-dna-cid)
+                                          release 1792000000))))
+    (is (= :binding-expired
+           (:error (install/resolve-entry "murakumo.cloud"
+                                          (assoc binding :expires-at 1792000000)
+                                          proof release 1792000000))))
+    (is (false? (install/canonical-domain? "Murakumo.cloud")))
+    (is (false? (install/canonical-domain? "murakumo.cloud.")))))
