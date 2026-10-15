@@ -11,6 +11,7 @@
   公開 resource URI の文法は `kotoba.protocol.ref`（ipfs://{cidv1} |
   ipns://{k51}。path は identity ではない — ADR-2608145100）。"
   (:require [kotoba.lang.text :as str]
+            [kotoba.protocol.cid :as cid-protocol]
             [kotoba.protocol.ref :as ref]))
 
 ;; ── value predicates ─────────────────────────────────────────────────────────
@@ -61,6 +62,24 @@
                 (non-blank-string? (:key-id v))
                 (nat-int? (:epoch v)))))
 
+(defn- app-cell-ref? [v]
+  (and (map? v)
+       (reverse-dns-id? (:id v))
+       (= :dag-cbor (:codec (cid-protocol/parse-cid (:dna-cid v))))))
+
+(defn app-cells?
+  "Optional L5 composition: a non-empty sequence of app-local cell IDs mapped
+  to immutable CIDv1/dag-cbor DNA bundle CIDs. IDs are unique within one app.
+  Agent identity, genesis, membership, and DNA validation remain owned by the
+  runtime and DNA."
+  [cells]
+  (boolean
+   (and (sequential? cells)
+        (seq cells)
+        (every? app-cell-ref? cells)
+        (let [ids (map :id cells)]
+          (= (count ids) (count (set ids)))))))
+
 ;; ── attribute registry ───────────────────────────────────────────────────────
 
 (def attributes
@@ -109,6 +128,8 @@
                        :pred map?}
    :kotoba.app/latest {:doc "更新チャネル = 提供 actor の鍵由来 IPNS 名 (署名済み latest ポインタ)"
                        :pred ipns-name?}
+   :kotoba.app/cells {:doc "app-local cell IDs mapped to CIDv1/dag-cbor DNA bundle CIDs [{:id <reverse-DNS> :dna-cid <CID>}]. Optional for legacy apps; runtime derives agent-specific cell state from the DNA."
+                      :pred app-cells?}
    :kotoba.app/icon {:doc "アイコン (CID or URI)"
                      :pred (fn [v] (or (cid? v) (app-uri? v)))}
    :kotoba.app/sig {:doc "manifest 署名 metadata {:suite-id <suite> :key-id <id> :epoch <nat-int>} — 検証者は kagi key registry (ADR-2607181200) を verify 時に解決して key state を強制する。retired epoch は過去 manifest の検証のみ可 (ADR-2607182600 d1b)"
