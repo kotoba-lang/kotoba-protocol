@@ -111,7 +111,7 @@ CID with `:cid-mismatch`.
 - `kotoba.protocol.transport` — multiaddr hops; deliberately no socket dialer
 - `kotoba.protocol.mux` — authenticated stream and causal head as separate coordinates
 - `kotoba.protocol.vocab` — `:kotoba.actor/*`, `:kotoba.graph/*`, `:kotoba.app/*`, and `:kotoba.link/*`
-- `kotoba.protocol.app` — signed, history-bearing L5 app manifests and capability requests
+- `kotoba.protocol.app` — signed, history-bearing L5 app manifests and capability requests. Optional `:kotoba.app/cells` entries map app-local reverse-DNS IDs to CIDv1/dag-cbor DNA bundle CIDs; runtime owns agent-specific cell creation and admission.
 - `kotoba.protocol.bridge` — host-mediated capability messages for embedded apps
 - `kotoba.protocol.a2a` — A2A v1.0 Agent Card, text-task admission, Task and JSON-RPC projections
 - `kotoba.protocol.slim` — authority-free, idempotent A2A-over-AGNTCY-SLIM application envelopes

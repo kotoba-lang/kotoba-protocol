@@ -221,6 +221,22 @@
   (is (not (vocab/app-uri? (str "ipfs://" cid "?format=raw"))))
   (is (not (vocab/app-uri? "ftp://x"))))
 
+(deftest app-cell-composition-references-immutable-dna-cids
+  (let [dna-cid "bafyreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u"
+        cells [{:id "net.kotoba.core.membership" :dna-cid dna-cid}
+               {:id "net.kotoba.murakumo.actions" :dna-cid dna-cid}]]
+    (is (true? (vocab/app-cells? cells)))
+    (is (true? (vocab/app-cells? (list (first cells)))))
+    (is (false? (vocab/app-cells? nil)))
+    (is (false? (vocab/app-cells? 7)))
+    (is (false? (vocab/app-cells? [])))
+    (is (false? (vocab/app-cells? [{:id "bad" :dna-cid dna-cid}])))
+    (is (false? (vocab/app-cells? [{:id "net.kotoba.app" :dna-cid "https://example.test/dna"}])))
+    (is (false? (vocab/app-cells? [{:id "net.kotoba.app" :dna-cid cid}])))
+    (is (false? (vocab/app-cells? [{:id "net.kotoba.app" :dna-cid "QmYwAPJzv5CZsnA625s3Xf2nemtYgPpHdWEz79ojWnPbdG"}])))
+    (is (false? (vocab/app-cells? [{:id "net.kotoba.app" :dna-cid dna-cid}
+                                   {:id "net.kotoba.app" :dna-cid dna-cid}])))))
+
 (deftest entity-validation
   (is (= [] (vocab/validate-entity
              {:kotoba.actor/did "did:key:z6MkoPd1PVGGf5gTMGy4nZNrBMszzfaeaNmZfSzgAZZNhDWq"
@@ -328,7 +344,20 @@
   (testing "caps must come from the registry"
     (is (= [{:cap "fs/read" :error :unknown-cap}]
            (app/validate-manifest (assoc mangaka-manifest
-                                         :kotoba.app/caps ["fs/read"]))))))
+                                         :kotoba.app/caps ["fs/read"])))))
+  (testing "multi-cell composition is optional and each role is content addressed"
+    (is (= [] (app/validate-manifest
+               (assoc mangaka-manifest
+                      :kotoba.app/cells [{:id "net.kotoba.core.membership"
+                                          :dna-cid "bafyreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u"}
+                                         {:id "net.kotoba.murakumo.actions"
+                                          :dna-cid "bafyreifq7onuoxumrs7tnpdtx5lsnnulu5k24cj75y44sz4ot7n5kz4l5u"}]))))
+    (is (some #(and (= :kotoba.app/cells (:attr %))
+                    (= :invalid-value (:error %)))
+              (app/validate-manifest
+               (assoc mangaka-manifest
+                      :kotoba.app/cells [{:id "net.kotoba.murakumo.actions"
+                                          :dna-cid "https://example.test/dna"}]))))))
 
 ;; ── app: manifest 署名 metadata (ADR-2607182600 d1b) ─────────────────────────
 
