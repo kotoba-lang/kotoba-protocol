@@ -1368,4 +1368,7 @@
                                           (assoc binding :expires-at 1792000000)
                                           proof release 1792000000))))
     (is (false? (install/canonical-domain? "Murakumo.cloud")))
-    (is (false? (install/canonical-domain? "murakumo.cloud.")))))
+    (is (false? (install/canonical-domain? "murakumo.cloud.")))
+    (let [long-label (apply str (repeat 63 "a"))]
+      (is (false? (install/canonical-domain?
+                   (apply str (interpose "." (repeat 4 long-label)))))))))
