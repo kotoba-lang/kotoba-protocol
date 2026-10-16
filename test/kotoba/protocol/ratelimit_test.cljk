@@ -8,7 +8,7 @@
 (def ^:private hex64b (apply str (repeat 64 "b")))
 
 (def ^:private challenge
-  {:issuer issuer :origin origin :epoch 10 :context "gateway"
+  {:issuer issuer :origin origin :epoch 10 :context "gateway" :type :blind-rsa
    :scope {:operations #{"content.get"}}})
 
 (defn- token [& {:as over}]
@@ -19,7 +19,8 @@
 (def ^:private ok-verify (constantly true))
 
 (defn- ctx [& {:as over}]
-  (merge {:challenge-digest hex64b :challenge-epoch 10 :epoch 10 :verify-fn ok-verify}
+  (merge {:challenge-digest hex64b :challenge-type :blind-rsa
+          :challenge-epoch 10 :epoch 10 :verify-fn ok-verify}
          over))
 
 ;; ── shapes ──────────────────────────────────────────────────────────────────

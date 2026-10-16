@@ -47,12 +47,12 @@
 
 ;; ── challenge and token ─────────────────────────────────────────────────────
 
-(def challenge-keys #{:issuer :origin :context :epoch :scope})
+(def challenge-keys #{:issuer :origin :context :epoch :type :scope})
 
 (defn challenge-errors
-  "A challenge names who issues, who redeems, the epoch, and the bounded
-  scope of what the token may be spent on. The scope is the token's
-  blast radius (ADR M6): a token cannot be spent outside it."
+  "A challenge names who issues, who redeems, the epoch, required token
+  type, and bounded scope of what the token may be spent on. The scope is
+  the token's blast radius (ADR M6): a token cannot be spent outside it."
   [c]
   (if-not (map? c)
     [{:error :malformed}]
@@ -63,6 +63,8 @@
               (when-not (vocab/did-key? (:issuer c)) {:error :not-a-key :key :issuer})
               (when-not (vocab/did-key? (:origin c)) {:error :not-a-key :key :origin})
               (when-not (nat-int? (:epoch c)) {:error :malformed :key :epoch})
+              (when-not (contains? token-types (:type c))
+                {:error :unknown-token-type :value (:type c)})
               (when-not (and (map? (:scope c)) (seq (:operations (:scope c))))
                 {:error :scope-required})]))))
 
@@ -82,9 +84,10 @@
 ;; ── role separation ─────────────────────────────────────────────────────────
 
 (defn separation-errors
-  "Parties are {:did :org}. The origin must be neither the issuer nor the
-  attester; an origin that is also the issuer sees both ends and the
-  token no longer unlinks. The issuer and the attester may be one party."
+  "Parties are {:did :org}. A supplied attester must have a valid DID. The
+  origin must be neither the issuer nor the attester; an origin that is also
+  the issuer sees both ends and the token no longer unlinks. The issuer and
+  the attester may be one party."
   [{:keys [attester issuer origin]}]
   (vec
    (remove nil?
@@ -95,7 +98,9 @@
                         (and (:org p) (= (:org p) (:org origin))))
                 {:error :issuer-origin-not-separated :role role}))
             [(when-not (and (vocab/did-key? (:did origin)) (vocab/did-key? (:did issuer)))
-               {:error :not-a-key})]))))
+               {:error :not-a-key})
+             (when (and attester (not (vocab/did-key? (:did attester))))
+               {:error :not-a-key :key :attester})]))))
 
 ;; ── issuance budget ─────────────────────────────────────────────────────────
 
@@ -124,26 +129,39 @@
        (<= (- current epoch) grace)))
 
 (defn prune
-  "Forget nonces from epochs that can no longer be redeemed."
+  "Forget expired nonces but retain spent entries from future epochs."
   [spent current-epoch grace]
   (update spent :epochs
-          (fn [m] (into {} (filter (fn [[e _]] (in-window? e current-epoch grace))) m))))
+          (fn [m]
+            (if-not (and (nat-int? current-epoch) (nat-int? grace))
+              m
+              (into {}
+                    (filter (fn [[e _]]
+                              (and (nat-int? e)
+                                   (or (> e current-epoch)
+                                       (in-window? e current-epoch grace))))
+                            m)))))
 
 (defn redeem
   "Admit one token. The caller computed the challenge it issued and
-  passes `:challenge-digest` and `:challenge-epoch`; `:epoch` is the
-  current epoch. `verify-fn` takes the token and returns true only for
-  a valid authenticator. On success the nonce joins the spent set for
-  the challenge epoch. → {:allow true :spent s'} | {:deny …, :spent s}.
+  passes `:challenge-digest`, `:challenge-type`, and `:challenge-epoch`;
+  `:epoch` is the current epoch. The type must match the token, and the
+  digest must bind that type. `verify-fn` takes the token and returns true
+  only for a valid authenticator. On success the nonce joins the spent set
+  for the challenge epoch. → {:allow true :spent s'} | {:deny …, :spent s}.
   A denial never records the nonce."
-  [spent token {:keys [challenge-digest challenge-epoch epoch grace verify-fn]}]
-  (let [grace (or grace default-grace)
+  [spent token context]
+  (let [{:keys [challenge-digest challenge-type challenge-epoch epoch grace verify-fn]} context
+        grace (if (contains? context :grace) grace default-grace)
         deny (fn [reason] {:deny reason :spent spent})
         nonce-key [(:key-id token) (:nonce token)]]
     (cond
       (seq (token-errors token)) (deny :malformed)
+      (not (contains? token-types challenge-type)) (deny :malformed)
+      (not= challenge-type (:type token)) (deny :challenge-mismatch)
       (not (hex? challenge-digest digest-length-hex)) (deny :malformed)
       (not= challenge-digest (:challenge-digest token)) (deny :challenge-mismatch)
+      (not (nat-int? grace)) (deny :malformed)
       (not (in-window? challenge-epoch epoch grace)) (deny :epoch-out-of-window)
       (contains? (get-in spent [:epochs challenge-epoch] #{}) nonce-key) (deny :double-spend)
       (not (ifn? verify-fn)) (deny :verifier-required)

@@ -80,17 +80,19 @@ RFC 9578 (`:blind-rsa`, `:voprf`).
 This ns does not blind, sign or verify: `verify-fn` is injected, and a missing
 one is `:verifier-required`, a deny.
 
-- **Challenge and token shape.** A challenge names issuer, origin, epoch and a
-  non-empty `:scope {:operations …}`. The scope is the token's blast radius: the
-  challenge digest binds it, so a token cannot be spent outside it.
+- **Challenge and token shape.** A challenge names issuer, origin, epoch, the
+  required token `:type`, and a non-empty `:scope {:operations …}`. The
+  challenge digest binds the type and scope, so a token cannot substitute a
+  different verification scheme or be spent outside its scope.
 - **Separation.** `separation-errors` rejects an origin that is the issuer or the
   attester, by key or by organisation. An origin that is also the issuer sees
   both ends and the token no longer unlinks.
 - **Budget.** `may-issue` grants up to the remaining budget for an
   attester-supplied epoch pseudonym. It is not counted per identity.
-- **Redemption.** `redeem` checks shape, challenge digest, epoch window (grace 1),
-  the spent set, and the injected verifier, in that order. A denial never records
-  the nonce. `prune` forgets epochs that can no longer be redeemed.
+- **Redemption.** `redeem` checks shape, token type against the challenge,
+  challenge digest, validated epoch window (grace 1), the spent set, and the
+  injected verifier, in that order. A denial never records the nonce. `prune`
+  forgets expired epochs while retaining spent entries from future epochs.
 - **Unlinkability audit.** `linkage-errors` rejects an issuance record and a
   redemption record that share any field except the epoch and the key id.
   Logging the nonce at issuance would let the issuer follow the token.
