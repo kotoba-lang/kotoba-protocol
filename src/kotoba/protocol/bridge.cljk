@@ -77,11 +77,12 @@
 ;;
 ;; grant (above) only intersects requested ∩ host-supported — it doesn't ask
 ;; "should this UNVERIFIED manifest get this cap at all". risky-caps closes
-;; that gap: caps that hand the guest either write reach (graph/transact) or
-;; a real off-host credential (llm/complete の応答/oauth/graph.write の CACAO)
-;; default to deny unless a labeler the HOST subscribes to (never the
-;; manifest's own claim — a malicious manifest can't self-attest) has issued
-;; a non-negated "verified" label for the manifest's own atproto record uri.
+;; that gap: caps that hand the guest either write reach (graph/transact,
+;; awai.cell.write) or a real off-host credential (llm/complete の応答 /
+;; oauth/graph.write の CACAO) default to deny unless a labeler the HOST
+;; subscribes to (never the manifest's own claim — a malicious manifest can't
+;; self-attest) has issued a non-negated "verified" label for the manifest's
+;; own atproto record uri.
 ;;
 ;; labels are com.atproto.label.defs#label shaped maps (aozora.pds.label's
 ;; existing atproto-compliant signing/verification/storage — this ns does
@@ -93,7 +94,7 @@
 (def risky-caps
   "caps that hand the guest write reach or a real off-host credential —
   default-deny for an unlabeled/untrusted manifest."
-  #{"graph/transact" "llm/complete" "oauth/graph.write"})
+  #{"graph/transact" "llm/complete" "oauth/graph.write" "awai.cell.write"})
 
 (defn verified?
   "labels (seq of {:src :val :neg? …} atproto label maps for the manifest's

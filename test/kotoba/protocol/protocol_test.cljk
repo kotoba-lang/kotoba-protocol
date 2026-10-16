@@ -463,7 +463,11 @@
       "同期 ABI 制約のため net 系は host bridge 代行 (ADR-2607062400)")
   (is (contains? app/known-caps "oauth/graph.write")
       "P2 OAuth 委任 cap (ADR-2607182600 d4 axis 2) — 他の bridge-caps と違い
-      app に実クレデンシャル (scope 限定 CACAO) が渡る"))
+      app に実クレデンシャル (scope 限定 CACAO) が渡る")
+  (is (contains? app/known-caps "awai.cell.read")
+      "Itonami host mediates reads from an app's declared Awai cells")
+  (is (contains? app/known-caps "awai.cell.write")
+      "Itonami host mediates signed submissions to an app's declared Awai cells"))
 
 ;; ── bridge ───────────────────────────────────────────────────────────────────
 
@@ -494,17 +498,22 @@
     (is (false? (kotoba.protocol.bridge/verified? [a-verified-label] #{})))))
 
 (deftest grant-with-trust-gates-only-risky-caps
-  (testing "unverified: risky caps dropped, graph/query passes through unaffected"
-    (is (= ["graph/query"]
+  (testing "unverified: cell reads remain available but cell writes require trust"
+    (is (= ["graph/query" "awai.cell.read"]
            (kotoba.protocol.bridge/grant-with-trust
-            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
-            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "awai.cell.read" "awai.cell.write"
+             "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "awai.cell.read" "awai.cell.write"
+             "graph/transact" "llm/complete" "oauth/graph.write"]
             [] #{"did:web:labeler.aozora.app"}))))
   (testing "verified: risky caps pass through too, in original request order"
-    (is (= ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+    (is (= ["graph/query" "awai.cell.read" "awai.cell.write"
+            "graph/transact" "llm/complete" "oauth/graph.write"]
            (kotoba.protocol.bridge/grant-with-trust
-            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
-            ["graph/query" "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "awai.cell.read" "awai.cell.write"
+             "graph/transact" "llm/complete" "oauth/graph.write"]
+            ["graph/query" "awai.cell.read" "awai.cell.write"
+             "graph/transact" "llm/complete" "oauth/graph.write"]
             [a-verified-label] #{"did:web:labeler.aozora.app"}))))
   (testing "still capped by host-supported — verified doesn't grant caps the host never offered"
     (is (= ["graph/query"]

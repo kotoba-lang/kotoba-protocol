@@ -48,6 +48,14 @@ capabilities are the exact intersection of the current manifest requests,
 explicit local approvals, and the host's supported set. No wildcard grants are
 recognized.
 
+The shared capability registry includes `awai.cell.read` and
+`awai.cell.write` for host-mediated access to an app's declared Awai cells.
+Reads return accepted entry projections. Writes submit an app-provided signed
+entry envelope to the Awai validator; the host does not expose its cell signing
+key or local bearer token. The host rechecks the protected install lock and
+cell scope for every operation. `awai.cell.write` is classified as risky, so
+hosts using the bridge trust policy withhold it from unverified manifests.
+
 Changing, adding, or removing a cell's DNA CID requires an explicit cell
 migration receipt before the update can commit. This first slice returns
 `:requires-cell-migration`; DNA migration execution and receipts belong to the
