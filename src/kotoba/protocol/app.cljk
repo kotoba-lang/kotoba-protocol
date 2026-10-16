@@ -53,8 +53,15 @@
   scope 限定・短命の CACAO を client-side mint して app に渡す —
   渡された CACAO で app 自身が (host を経由せず、host を跨いでも) 直接
   PDS に書き込める。fail-closed な同意 UI を挟む点、および app に
-  実際に委任クレデンシャルが渡る点が他の3 cap と異なる。"
-  ["net/http-post" "graph/query" "graph/transact" "llm/complete" "oauth/graph.write"])
+  実際に委任クレデンシャルが渡る点が他の bridge cap と異なる。
+
+  `awai.cell.read` / `awai.cell.write` は `itonami.app` のローカル host が
+  app-install lock に宣言された Awai cell だけへ代行する。read は
+  accepted entry projection を返す。write は app が持ち込む署名済み
+  envelope を Awai validator に渡し、cell の署名鍵や bearer token は
+  app に公開しない。"
+  ["net/http-post" "graph/query" "graph/transact" "llm/complete"
+   "oauth/graph.write" "awai.cell.read" "awai.cell.write"])
 
 (def known-caps (set (concat actor-host-imports bridge-caps)))
 
