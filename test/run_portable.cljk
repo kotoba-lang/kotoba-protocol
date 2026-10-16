@@ -17,6 +17,7 @@
 (require '[cljs.test :as t]
          '[kotoba.protocol.accountability-test]
          '[kotoba.protocol.pairwise-test]
+         '[kotoba.protocol.ratelimit-test]
          '[kotoba.protocol.protocol-test]
          '[kotoba.protocol.credential-test])
 
@@ -25,5 +26,6 @@
 
 (t/run-tests 'kotoba.protocol.accountability-test
              'kotoba.protocol.pairwise-test
+             'kotoba.protocol.ratelimit-test
              'kotoba.protocol.protocol-test
              'kotoba.protocol.credential-test)

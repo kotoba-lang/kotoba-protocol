@@ -68,3 +68,35 @@ is still a custodian offence. `receipt-visibility` makes self-access
 included, stays `:operator`. An owner-only receipt carries only
 `owner-only-receipt-fields` (graph, operation, timestamp, visibility) in
 plaintext — enough for the custody cross-audit, nothing about the reader.
+
+## R2: anonymous rate-limit tokens
+
+`kotoba.protocol.ratelimit` is the pure side of mechanism M3 (ADR-2610081200).
+A holder proves it is within a budget without showing who it is, following the
+Privacy Pass architecture (RFC 9576): the **attester** vouches that a client may
+receive tokens, the **issuer** blind-signs and never sees the token, the
+**origin** redeems and never sees the attestation. Token types are named after
+RFC 9578 (`:blind-rsa`, `:voprf`).
+
+This ns does not blind, sign or verify: `verify-fn` is injected, and a missing
+one is `:verifier-required`, a deny.
+
+- **Challenge and token shape.** A challenge names issuer, origin, epoch, the
+  required token `:type`, and a non-empty `:scope {:operations …}`. The
+  challenge digest binds the type and scope, so a token cannot substitute a
+  different verification scheme or be spent outside its scope.
+- **Separation.** `separation-errors` rejects an origin that is the issuer or the
+  attester, by key or by organisation. An origin that is also the issuer sees
+  both ends and the token no longer unlinks.
+- **Budget.** `may-issue` grants up to the remaining budget for an
+  attester-supplied epoch pseudonym. It is not counted per identity.
+- **Redemption.** `redeem` checks shape, token type against the challenge,
+  challenge digest, validated epoch window (grace 1), the spent set, and the
+  injected verifier, in that order. A denial never records the nonce. `prune`
+  forgets expired epochs while retaining spent entries from future epochs.
+- **Unlinkability audit.** `linkage-errors` rejects an issuance record and a
+  redemption record that share any field except the epoch and the key id.
+  Logging the nonce at issuance would let the issuer follow the token.
+
+Gateway and XRPC integration, and the actual blind-RSA / VOPRF implementation,
+are separate work in the consuming repositories.
