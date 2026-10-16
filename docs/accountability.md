@@ -35,9 +35,9 @@ act. `meet` takes the stricter of several bindings; no binding is
 `:accountability-unbound`, not `:t0`.
 
 `kotoba.protocol.govern/decide` runs this check after the chain check, and only
-when the intent names an `:action`. The held `:tier` is a claim; verifying the
-credential behind it belongs to `org-chainagnostic-cacao` / `org-ietf-ed25519`,
-not here. An absent tier is `:t0`.
+when the intent names an `:action`. The held `:tier` is an unverified claim;
+no credential verifier or tier mapping is currently assigned. An absent tier
+is `:t0`.
 
 ## Disclosure
 
