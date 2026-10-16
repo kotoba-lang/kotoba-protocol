@@ -3,7 +3,8 @@
 
   Server hostname is not authority. Keys write. Governor decides.
   A denied write never reaches the action log. This ns does not
-  verify CACAO signatures — crypto lives in cacao / kotoba-auth.
+  verify CACAO signatures — crypto lives in org-chainagnostic-cacao /
+  org-ietf-ed25519.
   The shape is enough to fail closed:
 
     author = graph-owner, no cacao     → allow (depth-1 self mint)

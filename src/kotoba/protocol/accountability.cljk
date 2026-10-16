@@ -14,8 +14,9 @@
                        never lower one, never touch L0.
 
   Two bindings that meet take the stricter requirement (max tier).
-  Nothing here verifies a credential or a signature: the held tier is
-  a claim that `kotoba-auth` / credential verification must back.
+  Nothing here verifies a credential or a signature. The held tier is an
+  unverified claim; no credential verifier or tier mapping is currently
+  assigned.
   The shape is enough to fail closed:
 
     unknown act, unbound act, missing threshold   → strictest outcome

@@ -35,8 +35,9 @@ act. `meet` takes the stricter of several bindings; no binding is
 `:accountability-unbound`, not `:t0`.
 
 `kotoba.protocol.govern/decide` runs this check after the chain check, and only
-when the intent names an `:action`. The held `:tier` is a claim; verifying the
-credential behind it belongs to `kotoba-auth`, not here. An absent tier is `:t0`.
+when the intent names an `:action`. The held `:tier` is an unverified claim;
+no credential verifier or tier mapping is currently assigned. An absent tier
+is `:t0`.
 
 ## Disclosure
 
@@ -53,8 +54,8 @@ root seed, a different `did:key` per context, derived as
 `HKDF-SHA256(root-seed, salt "kotoba/pairwise/v1", info context, 32)` → Ed25519
 seed. A context is a canonical ref or a reverse-DNS id, never free text.
 `binding-errors` rejects one DID in two contexts (`:linked-across-contexts`),
-a context bound twice, and the root DID shown as a pairwise DID. Derivation
-itself lives in kotoba-auth.
+a context bound twice, and the root DID shown as a pairwise DID. Ed25519 keys
+and `did:key` encoding live in `org-ietf-ed25519`, not here.
 
 **`compose-policies`** is the meet of whole policies: the union of acts, each
 at the stricter tier, and each param at the intersection of ranges. An empty
