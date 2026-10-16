@@ -140,7 +140,7 @@
                               (and (nat-int? e)
                                    (or (> e current-epoch)
                                        (in-window? e current-epoch grace))))
-                            m)))))
+                            m))))))
 
 (defn redeem
   "Admit one token. The caller computed the challenge it issued and
