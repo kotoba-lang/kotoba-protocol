@@ -129,6 +129,7 @@
   "app manifest entity map → problems ([] = ok)。
   共通必須: id / version / kind。kind 別要件は kind-requirements。
   caps は registry の部分集合。値形は vocab/validate-entity に委譲。
+  :kotoba.app/cells があれば、app-local ID と immutable DNA CID の組を検証する。
   bundle-cid と ipfs:// embed-url を両方持つ場合は同一 CID であることも検証
   (bundle-cid-consistent?)。"
   [m]

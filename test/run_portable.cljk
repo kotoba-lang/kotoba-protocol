@@ -18,7 +18,8 @@
          '[kotoba.protocol.accountability-test]
          '[kotoba.protocol.pairwise-test]
          '[kotoba.protocol.ratelimit-test]
-         '[kotoba.protocol.protocol-test])
+         '[kotoba.protocol.protocol-test]
+         '[kotoba.protocol.credential-test])
 
 (defmethod t/report [:cljs.test/default :end-run-tests] [m]
   (when-not (t/successful? m) (set! (.-exitCode js/process) 1)))
@@ -26,4 +27,5 @@
 (t/run-tests 'kotoba.protocol.accountability-test
              'kotoba.protocol.pairwise-test
              'kotoba.protocol.ratelimit-test
-             'kotoba.protocol.protocol-test)
+             'kotoba.protocol.protocol-test
+             'kotoba.protocol.credential-test)
