@@ -467,7 +467,9 @@
   (is (contains? app/known-caps "awai.cell.read")
       "Itonami host mediates reads from an app's declared Awai cells")
   (is (contains? app/known-caps "awai.cell.write")
-      "Itonami host mediates signed submissions to an app's declared Awai cells"))
+      "Itonami host mediates signed submissions to an app's declared Awai cells")
+  (is (contains? app/known-caps "awai.policy.evaluate")
+      "Itonami host evaluates only its local, read-only Kotoba policy bundle"))
 
 ;; ── bridge ───────────────────────────────────────────────────────────────────
 

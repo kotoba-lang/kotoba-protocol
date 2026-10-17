@@ -56,6 +56,14 @@ key or local bearer token. The host rechecks the protected install lock and
 cell scope for every operation. `awai.cell.write` is classified as risky, so
 hosts using the bridge trust policy withhold it from unverified manifests.
 
+The registry also includes `awai.policy.evaluate` for explicit, local-only
+evaluation of the Kotoba policy bound to the installed domain. The app may
+choose a declared export and provide typed input values, but cannot choose a
+policy ID; the host resolves that from its protected installation origin.
+Evaluation is read-only and does not authorize a host effect, Awai write, or
+payment. It is not classified as risky because the operation stays in the
+verified local policy bundle and returns only the deterministic result.
+
 Changing, adding, or removing a cell's DNA CID requires an explicit cell
 migration receipt before the update can commit. This first slice returns
 `:requires-cell-migration`; DNA migration execution and receipts belong to the
