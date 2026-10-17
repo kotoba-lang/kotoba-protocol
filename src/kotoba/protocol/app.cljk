@@ -59,9 +59,14 @@
   app-install lock に宣言された Awai cell だけへ代行する。read は
   accepted entry projection を返す。write は app が持ち込む署名済み
   envelope を Awai validator に渡し、cell の署名鍵や bearer token は
-  app に公開しない。"
+  app に公開しない。
+
+  `awai.policy.evaluate` は local host の同梱 Kotoba policy を純粋評価する。
+  app は policy ID を選べず、host が保護された domain binding から選ぶ。
+  結果は app 表示用の値で、effect や host authority を与えない。"
   ["net/http-post" "graph/query" "graph/transact" "llm/complete"
-   "oauth/graph.write" "awai.cell.read" "awai.cell.write"])
+   "oauth/graph.write" "awai.cell.read" "awai.cell.write"
+   "awai.policy.evaluate"])
 
 (def known-caps (set (concat actor-host-imports bridge-caps)))
 
