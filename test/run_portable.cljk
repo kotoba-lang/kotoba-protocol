@@ -16,6 +16,7 @@
 ;; against the tree.
 (require '[cljs.test :as t]
          '[kotoba.protocol.accountability-test]
+         '[kotoba.protocol.boundary-test]
          '[kotoba.protocol.pairwise-test]
          '[kotoba.protocol.ratelimit-test]
          '[kotoba.protocol.protocol-test]
@@ -25,6 +26,7 @@
   (when-not (t/successful? m) (set! (.-exitCode js/process) 1)))
 
 (t/run-tests 'kotoba.protocol.accountability-test
+             'kotoba.protocol.boundary-test
              'kotoba.protocol.pairwise-test
              'kotoba.protocol.ratelimit-test
              'kotoba.protocol.protocol-test

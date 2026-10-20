@@ -98,6 +98,7 @@ CID with `:cid-mismatch`.
 ## Executable surface
 
 - `kotoba.protocol.layers` — layers, planes, link kinds, ownership, maturity
+- `kotoba.protocol.boundary` — judgment-free boundary wire declaration (`:kotoba.lisp-machine/boundary-v1`): value/message/receipt canonical forms (tagged dag-cbor), write order canonical-bytes → CID, the six inherited boundary rules. Declarations only; codecs stay with io-ipld/dag-cbor, judgments stay with rule Form and grant.
 - `kotoba.protocol.ref` — strict `ipfs://` and `ipns://` public references
 - `kotoba.protocol.cid` — CIDv1/sha2-256 parsing and digest comparison; no hashing
 - `kotoba.protocol.address` — output- versus input-addressed identity
